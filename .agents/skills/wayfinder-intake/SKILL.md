@@ -44,7 +44,9 @@ Keep work that requires live exchange with the captain, such as an interview or 
 
 ## Resolve the ticket with the work
 
-Write the ticket's resolution and the corresponding map update in the same project change that carries the completed work.
-A research ticket produces no such change, so its resolution, map update, and deliverable belong in the project through a write that needs the same captain approval as the claim.
-Without that approval they stay in Firstmate's private report, and no path puts them where the map can link them.
+When completed work lands through a project change, write the ticket's resolution and corresponding map update in that same change.
+Landing a research deliverable, ticket resolution, or map update inside a project is a separate project write under `AGENTS.md` hard rule 1, never authority inherited from an approved claim.
+Firstmate makes only the completion writes concretely named by the captain's approval.
+Without approval covering those writes, keep the scout report in Firstmate's private record, leave the map unchanged, and either wait for approval or route the resolution through normal delivery as a follow-on ship task.
+A captain-session ticket produces no worker-carried change, so the captain must land its resolution or a follow-on ship task must carry it through normal delivery.
 Use `AGENTS.md` section 7 for the delivery and merge lifecycle instead of defining another path here.
