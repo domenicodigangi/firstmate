@@ -26,9 +26,8 @@ When a ticket lacks enough context or acceptance criteria for direct dispatch, r
 
 ## Claim and queue the work
 
-Claim a selected ticket through the project's existing tracker mechanism before dispatch.
 The project-side claim is the concurrency guard visible to other sessions and working copies, so a private in-flight record does not replace it.
-Claiming writes inside the project, so do it only for a project where the captain has concretely approved that write under `AGENTS.md` hard rule 1.
+Claiming a selected ticket through the project's existing tracker mechanism writes inside the project, so do it before dispatch only for a project where the captain has concretely approved that write under `AGENTS.md` hard rule 1.
 Without that approval the ticket goes unclaimed, and the map's guard against two sessions taking one ticket is not in force for that project.
 Do not simulate the claim from outside the project or present an unclaimed ticket as guarded.
 Ask the captain to approve that project write to turn the guard on.
