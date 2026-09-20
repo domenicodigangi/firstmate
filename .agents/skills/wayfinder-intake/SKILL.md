@@ -26,10 +26,15 @@ When a ticket lacks enough context or acceptance criteria for direct dispatch, r
 
 ## Claim and queue the work
 
-Claim the selected ticket through the project's existing tracker mechanism before dispatch.
+A selected ticket is claimed through the project's existing tracker mechanism before its work begins.
 The project-side claim is the concurrency guard visible to other sessions and working copies, so a private in-flight record does not replace it.
-Do not add a map or its undispatched tickets to Firstmate's backlog.
+Write that claim yourself before dispatch only for a project where the captain has concretely approved that project write under `AGENTS.md` hard rule 1.
+Without that approval, dispatch first and require the worker to claim the ticket as its first action inside its own worktree through the project's selected delivery path.
+The worker-side claim narrows the guard, because the ticket stays unclaimed between selection and that worker's first commit.
+Ask the captain to approve the project-side claim when that narrower guard is not enough.
+Never mirror a map into Firstmate's backlog.
 When dispatching a claimed ticket, add only one backlog item whose note is a one-line pointer naming that ticket, then follow the backlog contract in `AGENTS.md` section 10.
+Leave an undispatched ticket out of the backlog, except a ticket routed to a captain session, which is a main-side thread worth durable tracking and is filed and held as its own work item under that same section.
 
 ## Route the ticket
 
