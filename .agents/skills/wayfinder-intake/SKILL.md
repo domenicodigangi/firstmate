@@ -26,12 +26,12 @@ When a ticket lacks enough context or acceptance criteria for direct dispatch, r
 
 ## Claim and queue the work
 
-A selected ticket is claimed through the project's existing tracker mechanism before its work begins.
+Claim a selected ticket through the project's existing tracker mechanism before dispatch.
 The project-side claim is the concurrency guard visible to other sessions and working copies, so a private in-flight record does not replace it.
-Write that claim yourself before dispatch only for a project where the captain has concretely approved that project write under `AGENTS.md` hard rule 1.
-Without that approval, dispatch first and require the worker to claim the ticket as its first action inside its own worktree through the project's selected delivery path.
-The worker-side claim narrows the guard, because the ticket stays unclaimed between selection and that worker's first commit.
-Ask the captain to approve the project-side claim when that narrower guard is not enough.
+Claiming writes inside the project, so do it only for a project where the captain has concretely approved that write under `AGENTS.md` hard rule 1.
+Without that approval the ticket goes unclaimed, and the map's guard against two sessions taking one ticket is not in force for that project.
+Do not simulate the claim from outside the project or present an unclaimed ticket as guarded.
+Ask the captain to approve that project write to turn the guard on.
 Never mirror a map into Firstmate's backlog.
 When dispatching a claimed ticket, add only one backlog item whose note is a one-line pointer naming that ticket, then follow the backlog contract in `AGENTS.md` section 10.
 Leave an undispatched ticket out of the backlog, except a ticket routed to a captain session, which is a main-side thread worth durable tracking and is filed and held as its own work item under that same section.
@@ -45,5 +45,6 @@ Keep work that requires live exchange with the captain, such as an interview or 
 ## Resolve the ticket with the work
 
 Write the ticket's resolution and the corresponding map update in the same project change that carries the completed work.
-Keep a research deliverable in the project where the map can link it, rather than leaving it only in Firstmate's private report.
+Landing a research deliverable in the project where the map can link it is the same kind of project write and needs the same approval.
+Without that approval the deliverable stays in Firstmate's private report, and no path puts it where the map can link it.
 Use `AGENTS.md` section 7 for the delivery and merge lifecycle instead of defining another path here.
