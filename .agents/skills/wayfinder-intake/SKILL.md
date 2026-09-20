@@ -45,6 +45,6 @@ Keep work that requires live exchange with the captain, such as an interview or 
 ## Resolve the ticket with the work
 
 Write the ticket's resolution and the corresponding map update in the same project change that carries the completed work.
-Landing a research deliverable in the project where the map can link it is the same kind of project write and needs the same approval.
-Without that approval the deliverable stays in Firstmate's private report, and no path puts it where the map can link it.
+A research ticket produces no such change, so its resolution, map update, and deliverable belong in the project through a write that needs the same captain approval as the claim.
+Without that approval they stay in Firstmate's private report, and no path puts them where the map can link them.
 Use `AGENTS.md` section 7 for the delivery and merge lifecycle instead of defining another path here.
