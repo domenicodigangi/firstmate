@@ -33,7 +33,7 @@ Without that approval the ticket goes unclaimed, and the map's guard against two
 Do not simulate the claim from outside the project or present an unclaimed ticket as guarded.
 Ask the captain to approve that project write to turn the guard on.
 Never mirror a map into Firstmate's backlog.
-When dispatching a claimed ticket, add only one backlog item whose note is a one-line pointer naming that ticket, then follow the backlog contract in `AGENTS.md` section 10.
+When dispatching a ticket, add only one backlog item whose note is a one-line pointer naming that ticket, then follow the backlog contract in `AGENTS.md` section 10.
 Leave an undispatched ticket out of the backlog, except a ticket routed to a captain session, which is a main-side thread worth durable tracking and is filed and held as its own work item under that same section.
 
 ## Route the ticket
