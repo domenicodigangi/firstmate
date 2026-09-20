@@ -1,0 +1,8 @@
+Captain, I would proceed as follows:
+
+- Dispatch D-020 immediately as a **ship** through Apollo’s selected delivery path. Lack of claim approval does **not** block this explicitly authorized dispatch.
+- Do **not** write or simulate the tracker claim.
+- Report: **“D-020 is unclaimed; Apollo’s concurrency guard against another session taking it is not in force.”**
+- Create exactly one Firstmate backlog work item. Its note is a one-line pointer naming **Apollo D-020**, with Apollo’s selected delivery mode and yolo posture recorded as required. Do not copy or mirror the ticket into the backlog.
+- Create the implementation brief from D-020 and dispatch the ship. The spawn transition moves that backlog item to **In flight**.
+- Do **not** create a review, restatement, preparation, or design scout first. D-020 is already complete and dispatch-ready.

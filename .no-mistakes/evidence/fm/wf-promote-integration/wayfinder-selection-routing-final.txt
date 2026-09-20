@@ -1,0 +1,7 @@
+Captain, I would route the tickets this way:
+
+- **D-001:** Do not select it. The map’s October-survey deferral overrides the takeable list. It would eventually be research/scout work, but it does not enter the backlog now.
+- **D-002:** Select it as the next implementation ticket and route it as a ship task. It does not enter the backlog or get dispatched yet because Apollo’s required tracker claim is a project write and you have not approved it.
+- **D-003:** Keep it in this captain session for the interview and live artifact iteration; do not dispatch it to a worker. It does enter the backlog as its own item, held for our live session.
+
+Before starting D-002, I would ask you to approve its tracker claim and implementation in Apollo. The claim is the concurrency protection; until approved, D-002 remains unclaimed and unguarded. Any later ticket-resolution or map-update write also needs approval explicitly covering those completion changes—it is not authorized merely by approving the claim. D-003 likewise cannot write its artifact or resolution into Apollo without specific approval; you would land its resolution yourself or authorize a follow-on ship task.

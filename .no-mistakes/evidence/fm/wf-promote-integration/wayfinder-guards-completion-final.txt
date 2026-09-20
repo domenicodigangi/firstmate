@@ -1,0 +1,21 @@
+Captain:
+
+**Situation A — R-010**
+
+- No scout is dispatched to rewrite or clarify the ticket.
+- R-010 is a defective tracker ticket because it lacks a research question, scope, and acceptance criteria.
+- Firstmate reports those gaps and leaves R-010 unclaimed, undispatched, and outside the execution queue.
+- Work can proceed only after the ticket itself is corrected into dispatch-ready instructions through an authorized project update.
+
+**Situation B — R-011**
+
+- The completed report remains in Firstmate’s private record at `data/<task-id>/report.md`.
+- The earlier approval covered only the tracker claim. It grants no authority to publish the report, resolve R-011, or update the map.
+- Therefore, the project map receives no completion change; the existing claim is not treated as completion authority.
+
+R-011 may be resolved through either permitted route:
+
+1. Wait for concrete captain approval naming the project completion writes—such as the report destination, ticket resolution, and corresponding map update. Firstmate performs only the specifically approved writes.
+2. With authorization, dispatch a follow-on ship task that lands the report, resolves R-011, and updates the map together through the project’s normal delivery and merge process.
+
+Until one of those routes is authorized and completed, R-011 remains unresolved in the project map.

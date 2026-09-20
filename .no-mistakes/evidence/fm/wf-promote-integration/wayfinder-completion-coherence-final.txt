@@ -1,0 +1,7 @@
+Captain:
+
+- **B-030 — build ticket:** The implementation, B-030’s resolution, and its corresponding map update must be delivered as one ship change through the selected delivery path. The ticket/map updates must not land separately before or after the implementation.
+
+- **R-031 — research ticket:** The scout must retain a self-contained private report in `data/<id>/report.md`, but that is not the project deliverable. The durable research artifact belongs inside the project at the captain-approved deliverable path. Because a scout does not open a PR, a ship change must carry the project artifact, R-031’s resolution, and the corresponding map update together through the selected delivery path.
+
+For both tickets, “same change” means one landing unit—one PR or one approved local-only landing—not independently landed planning updates. Normal merge authority still applies: configured `yolo` authority or the captain’s explicit merge approval.
