@@ -1,8 +1,8 @@
 ---
 name: wayfinder-intake
 description: >-
-  Agent-only intake and routing procedure for a project whose planning lives as an in-repo decision-ticket map.
-  Use before choosing or dispatching work from such a map.
+  Agent-only intake, routing, and completion procedure for a project whose planning lives as an in-repo decision-ticket map.
+  Use before choosing, dispatching, resolving, or completing work from such a map.
 user-invocable: false
 metadata:
   internal: true
@@ -10,7 +10,7 @@ metadata:
 
 # wayfinder-intake
 
-Use this procedure before intake or dispatch for a project whose planning lives as an in-repo decision-ticket map.
+Use this procedure before intake, dispatch, resolution, or completion for a project whose planning lives as an in-repo decision-ticket map.
 The project's map is the planning authority, while Firstmate's backlog remains the execution queue under `AGENTS.md` section 10.
 
 ## Select a ticket
