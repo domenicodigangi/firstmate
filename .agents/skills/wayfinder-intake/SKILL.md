@@ -20,7 +20,7 @@ Read the product's map through this home's clone of the repository that owns it 
 Run that tracker's read-only frontier helper for candidates.
 Treat its output as candidates derived from ticket frontmatter, not as a decision or priority order.
 Check the map prose for scope, ordering, and deferrals before selecting any candidate.
-Do not select a ticket that the map defers even when the takeable-list output includes it.
+Do not select a ticket that the map defers even when the frontier helper output includes it.
 
 Treat each ticket as dispatch-ready instructions.
 Do not dispatch a separate scout to review, restate, or prepare a ticket before its work begins.
@@ -30,8 +30,8 @@ When a ticket lacks enough context or acceptance criteria for direct dispatch, r
 
 The claim in the authoritative tracker is the concurrency guard visible to other sessions and working copies, so a private in-flight record does not replace it.
 For an in-repository tracker, claim through the project's existing claim helper.
-For a dedicated tracker, claim through a commit or pull request against that tracker which sets `assignee:`.
-Either claim is a project write, so do it before dispatch only when the captain has concretely approved that write under `AGENTS.md` hard rule 1.
+For a dedicated tracker, land a commit or pull request against that tracker which sets `assignee:` before dispatch, so the claim is visible on the authoritative branch that the frontier helper reads.
+Either claim is a project write, so make it only when the captain has concretely approved that write under `AGENTS.md` hard rule 1.
 Without that approval the ticket stays unclaimed and must be reported as unguarded.
 Do not simulate the claim from outside the authoritative tracker or present an unclaimed ticket as guarded.
 Ask the captain to approve the authoritative tracker write to turn the guard on.
