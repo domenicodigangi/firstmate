@@ -30,7 +30,7 @@ When a ticket lacks enough context or acceptance criteria for direct dispatch, r
 
 The claim in the authoritative tracker is the concurrency guard visible to other sessions and working copies, so a private in-flight record does not replace it.
 For an in-repository tracker, claim through the project's existing claim helper.
-For a dedicated tracker, land a commit or pull request against that tracker which sets `assignee:` before dispatch, so the claim is visible on the authoritative branch that the frontier helper reads.
+For a dedicated tracker, land `assignee:` against that tracker through its own workflow before dispatch, so the claim is visible on the authoritative branch that the frontier helper reads.
 Either claim is a project write, so make it only when the captain has concretely approved that write under `AGENTS.md` hard rule 1.
 Without that approval the ticket stays unclaimed and must be reported as unguarded.
 Do not simulate the claim from outside the authoritative tracker or present an unclaimed ticket as guarded.
@@ -48,7 +48,8 @@ Keep work that requires live exchange with the captain, such as an interview or 
 ## Resolve the ticket with the work
 
 Land the ticket's resolution and its map decision line as a change against the authoritative tracker.
-When the tracker is separate from the product repository, use its own pull request, cross-link it with the product change, and merge it only after the product change lands so the tracker never records work that did not ship.
+When the tracker is separate from the product repository, land the tracker-side change through that repository's own workflow, cross-link it with the product change, and do so only after the product change lands so the tracker never records work that did not ship.
+When that tracker takes no pull requests, as the Wayfinder tracker does, commit the tracker-side change directly to its default branch.
 Landing a research deliverable, ticket resolution, or map update in the authoritative tracker is a separate project write under `AGENTS.md` hard rule 1, never authority inherited from an approved claim.
 Firstmate makes only the completion writes concretely named by the captain's approval.
 Without approval covering those writes, keep the resolution in Firstmate's private record and leave the authoritative tracker untouched.
