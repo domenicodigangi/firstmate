@@ -260,6 +260,8 @@ EOF
     printf '%s\n' "$PROMOTION_ASK_USER_BLOCK"
   fi
   printf '\n'
+  fm_pr_description_trigger_block
+  printf '\n'
   fm_dod_block "$MODE" "$ID" "$BRANCH" "$FORGE"
 }
 mkdir -p "$DATA/$ID"

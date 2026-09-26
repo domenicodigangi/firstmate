@@ -6,6 +6,10 @@
 # receives. Both paths must hand the worker the same contract: a promoted
 # no-mistakes worker that never received the ask-user escalation rule or the
 # `--yes` ban is the exact delivery hole this single owner exists to close.
+# It is also the single owner of the PR-description skill's load trigger, which
+# both sourcing paths render so every worker that can write a pull request gets
+# the same instruction, resolved from the firstmate code root rather than a bare
+# skill name a project crewmate could not discover.
 # fm_dod_block <no-mistakes|direct-PR|local-only> <task-id> [branch] [<forge>]
 # prints the block on stdout with no trailing blank line. The caller validates the
 # mode; an unknown mode is refused rather than silently rendered as the pipeline
@@ -334,6 +338,18 @@ Then append \`done [at=<epoch>]: PR {change url} published for review\` to the s
 That \`done:\` is accepted only when the change's current patch set on the server carries this copy's HEAD tree, so commit nothing after publishing; if you must change the work, commit it and publish again before reporting done.
 A \`done:\` whose URL is not the canonical \`https://<host>/c/<project>/+/<number>\` change URL is refused.
 There is no pull request, no \`gh-axi\` call, and no forge CI result to report: a human reviewer approves and submits the change on the server, and firstmate relays that outcome.
+EOF
+}
+
+# The PR-description standard's load trigger, rendered once for every worker
+# that can write a pull request. A project crewmate's harness discovers skills
+# from its own project worktree, and `.agents/skills/` skills are never vendored
+# there, so the trigger names the absolute firstmate code-root path instead of a
+# bare name. bin/fm-brief.sh renders it into a fresh ship brief and
+# bin/fm-promote.sh into a promoted scout's ship instructions.
+fm_pr_description_trigger_block() {
+  cat <<EOF
+Load \`$FM_ROOT/.agents/skills/pr-description/SKILL.md\` before writing or rewriting a pull-request title or description.
 EOF
 }
 
