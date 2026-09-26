@@ -337,6 +337,18 @@ There is no pull request, no \`gh-axi\` call, and no forge CI result to report: 
 EOF
 }
 
+# The PR-description standard's load trigger, rendered once for every worker
+# that can write a pull request. A project crewmate's harness discovers skills
+# from its own project worktree, and `.agents/skills/` skills are never vendored
+# there, so the trigger names the absolute firstmate code-root path instead of a
+# bare name. bin/fm-brief.sh renders it into a fresh ship brief and
+# bin/fm-promote.sh into a promoted scout's ship instructions.
+fm_pr_description_trigger_block() {
+  cat <<EOF
+Load \`$FM_ROOT/.agents/skills/pr-description/SKILL.md\` before writing or rewriting a pull-request title or description.
+EOF
+}
+
 fm_dod_block() {  # <mode> <task-id> [branch] [<forge>]
   local mode=$1 id=$2 forge=${4:-none}
   local branch=${3:-fm/$id}

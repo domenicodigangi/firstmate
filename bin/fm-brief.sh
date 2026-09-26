@@ -653,7 +653,7 @@ $INBOX_SECTION
 # Project memory
 A project's \`AGENTS.md\` or \`CLAUDE.md\` is loaded into every agent session in that project, so edit it only to correct information that is factually wrong - including information your own change made wrong - and never to add knowledge because it is missing.
 A correction edits only the wrong text: do not run \`$FM_ROOT/bin/fm-ensure-agents-md.sh\`, create either file, or add sections, headings, or pointers alongside it.
-Load \`pr-description\` before writing or rewriting a pull-request title or description.
+$(fm_pr_description_trigger_block)
 
 $DOD
 EOF

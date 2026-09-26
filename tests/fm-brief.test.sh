@@ -214,7 +214,7 @@ test_ship_modes_generate_clean_briefs() {
     assert_grep "## Captain's intent" "$brief" "$id: brief missing Captain's intent subsection"
     assert_grep "## Firstmate spec" "$brief" "$id: brief missing Firstmate spec subsection"
     assert_grep 'never a bare number such as "PR 108"' "$brief" "$id: brief missing the full-PR-URL rule"
-    assert_grep "Load \`pr-description\` before writing or rewriting a pull-request title or description." "$brief" \
+    assert_grep "Load \`$ROOT/.agents/skills/pr-description/SKILL.md\` before writing or rewriting a pull-request title or description." "$brief" \
       "$id: ship brief missing the PR-description skill trigger"
     assert_grep "mid-task \`working:\` line (including setup complete) is nonterminal" "$brief" \
       "$id: brief missing nonterminal working:/setup-complete gate protection"
