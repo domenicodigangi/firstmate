@@ -6,6 +6,10 @@
 # receives. Both paths must hand the worker the same contract: a promoted
 # no-mistakes worker that never received the ask-user escalation rule or the
 # `--yes` ban is the exact delivery hole this single owner exists to close.
+# It is also the single owner of the PR-description skill's load trigger, which
+# both sourcing paths render so every worker that can write a pull request gets
+# the same instruction, resolved from the firstmate code root rather than a bare
+# skill name a project crewmate could not discover.
 # fm_dod_block <no-mistakes|direct-PR|local-only> <task-id> [branch] [<forge>]
 # prints the block on stdout with no trailing blank line. The caller validates the
 # mode; an unknown mode is refused rather than silently rendered as the pipeline
