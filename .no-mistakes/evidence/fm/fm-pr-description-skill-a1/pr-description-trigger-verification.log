@@ -1,0 +1,18 @@
+# PR-description trigger verification (live, 2026-09-26T21:32:52Z)
+
+## 1. Fresh ship brief generation via bin/fm-brief.sh
+command: FM_HOME=<lab> bin/fm-brief.sh prdesc-log-a1 demo-proj --mode no-mistakes
+85:Load `/home/ddg/.no-mistakes/worktrees/67bf63ea0b24/01M3FRE4F8RCJ4NZDD4PFDZV3M/.agents/skills/pr-description/SKILL.md` before writing or rewriting a pull-request title or description.
+rendered path: /home/ddg/.no-mistakes/worktrees/67bf63ea0b24/01M3FRE4F8RCJ4NZDD4PFDZV3M/.agents/skills/pr-description/SKILL.md
+path exists and is readable: yes
+bare-name trigger present (should be none): 0
+
+## 2. Promoted scout ship instructions via bin/fm-promote.sh
+33:Load `/home/ddg/.no-mistakes/worktrees/67bf63ea0b24/01M3FRE4F8RCJ4NZDD4PFDZV3M/.agents/skills/pr-description/SKILL.md` before writing or rewriting a pull-request title or description.
+trigger occurrences in promoted instructions: 1
+trigger occurrences in fresh brief: 1
+shared trigger block identical across both generation paths: yes
+
+## 3. Resolvability from an unrelated project worktree cwd
+absolute path readable from unrelated cwd: yes
+project worktree has its own pr-description skill: no

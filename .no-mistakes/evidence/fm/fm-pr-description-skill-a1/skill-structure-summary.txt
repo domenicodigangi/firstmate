@@ -1,0 +1,14 @@
+# pr-description skill content (shipped artifact)
+
+11:# pr-description
+16:## Title
+24:## Body
+30:## What
+34:## Why
+38:## How
+44:## Notes
+48:## Next
+66:## Finalization
+
+Evidence-section present?
+NO Evidence section
