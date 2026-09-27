@@ -355,6 +355,8 @@ STUB
       "$mode: promoted worker did not receive the Captain's intent subsection"
     assert_grep "## Firstmate spec" "$payload" \
       "$mode: promoted worker did not receive the Firstmate spec subsection"
+    assert_grep "Load \`$ROOT/.agents/skills/pr-description/SKILL.md\` before writing or rewriting a pull-request title or description." "$payload" \
+      "$mode: promoted worker did not receive the PR-description skill trigger"
 
     # Compare the public outputs of both real generation paths. The promoted
     # payload ends at its Definition of done, as does an ordinary generated
