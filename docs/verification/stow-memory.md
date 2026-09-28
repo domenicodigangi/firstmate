@@ -107,3 +107,24 @@ claude -p --model claude-haiku-4-5-20251001 --resume "$SESSION" --output-format 
 
 The first call returned `num_turns` 2 and the result `stow unavailable here`, so the Stop hook held the turn open once.
 The first `/compact` returned `Compaction blocked by PreCompact hook: [...]: No /stow has run since the previous compaction, ...`, the second wrote a `compact_boundary` entry with `"trigger":"manual","preTokens":22242` to the same transcript file, and the last call received `This session compacted (trigger manual, at 22242 tokens) with no /stow since the previous compaction.` ahead of the stow instruction.
+
+### When the guard itself fails
+
+These runs replaced one of the two guard entries with a stand-in hook that failed on purpose, while the other entry kept the real guard; each stand-in entry set a 5-second hook `timeout`.
+The stand-in read its failure from a file: `exit1` printed `stub guard failure` and exited 1, `crash` sent itself `SIGSEGV`, `timeout` slept for 60 seconds, and `syntax` ran a bash script that fails to parse.
+Every run used `claude-haiku-4-5-20251001`; the automatic runs added `CLAUDE_CODE_AUTO_COMPACT_WINDOW=100000` and read four files of about 22,500 tokens each, as in the earlier probe.
+
+With the stand-in at PreCompact:
+
+- Manual `/compact` after a one-word reply: the debug log showed `PreCompact:manual [...] completed with status 1`, `completed with status 139`, and `cancelled` for the three modes, each followed by a compaction; the transcripts gained a `compact_boundary` with `"trigger":"manual"` at 21,955, 21,992, and 22,010 tokens and no record of the hook failure.
+  The next turn end's real guard returned `This session compacted (trigger manual, at 21955 tokens) with no /stow since the previous compaction.` and the matching lines for the other two.
+- Automatic compaction: `PreCompact:auto [...] completed with status 1`, `completed with status 139`, and `cancelled`, each followed within 25 milliseconds by a `source=compact` request, with boundaries of `"trigger":"auto"` at 76,904, 76,982, and 76,974 tokens, and the same report at the next turn end.
+- `syntax`: both `/compact` attempts returned `Compaction blocked by PreCompact hook: [...]` after `completed with status 2`, and the transcript gained no boundary.
+
+With the stand-in at Stop:
+
+- `exit1` and `crash` ended the turn with `num_turns` 1 and the reply `hello`; the transcripts gained a `hook_non_blocking_error` attachment with `"exitCode":1` and `"stderr":"Failed with non-blocking status code: stub guard failure"`, or `"exitCode":139` and `Segmentation fault (core dumped)`.
+- `timeout` ended the turn the same way after the debug log's `Hook Stop [...] timed out after 5000ms`, and the transcript gained a `hook_cancelled` attachment.
+- `syntax`, run with `--max-turns 4`, returned `error_max_turns` after `num_turns` 5, with four `Hook Stop (Stop) error:` entries carrying the bash parse error, so each turn end was held open again.
+
+Claude Code's default hook timeout is `600000` milliseconds in the 2.1.283 bundle (`timeout?e.timeout*1000:Fa` with `Fa=600000` beside the hook runner), and the tracked guard entries set no `timeout`.

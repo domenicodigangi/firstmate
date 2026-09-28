@@ -96,7 +96,8 @@ MODE=
 case "${1:-}" in
   --stop) MODE=stop ;;
   --precompact) MODE=precompact ;;
-  *) echo "usage: $(basename "$0") --stop|--precompact" >&2; exit 2 ;;
+  # Exit 1, never 2: Claude Code reads a hook's exit 2 as a deliberate block.
+  *) echo "usage: $(basename "$0") --stop|--precompact" >&2; exit 1 ;;
 esac
 
 # shellcheck source=bin/fm-primary-scope-lib.sh

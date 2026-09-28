@@ -695,6 +695,17 @@ Limits:
   A model with the 200,000-token window compacts on its own at about 167,000 tokens, before any stow threshold above that is reached; that compaction is reported afterwards.
 - When Claude Code prepares a summary in the background, it runs the compaction hook as the summary starts and later swaps the summary in without asking again, so only the report covers a summary started before the deferral applies.
 
+If the guard itself fails:
+
+- A compaction hook that exits with any code other than 0 or 2, crashes, or times out does not stop the compaction: manual and automatic compactions proceed, and nothing about the failure reaches the transcript.
+  A working turn-end guard then reports the compaction as one with no stow.
+- A turn-end hook that fails the same way lets the turn end normally; Claude Code records the failure in the transcript, but the model is not told, so that turn end neither asks for a stow nor reports anything.
+  The guard tries again at the next turn end, and while it keeps failing, automatic compaction stays deferred until the 400,000-token ceiling and then runs without a stow.
+- Claude Code gives a hook 600 seconds by default, and the guard's entries set no shorter limit, so a hung guard stalls that turn end or compaction for up to 10 minutes before Claude Code carries on as above.
+- Exit code 2 is the one failure that blocks, because Claude Code reads it as a deliberate hold, and bash exits with 2 when the script cannot be parsed.
+  A guard with a syntax error therefore holds every turn end open again and again, ending only at a turn limit such as `--max-turns`, and refuses every compaction, manual or automatic, which can run the session into its hard limit.
+  The guard's own usage error exits 1 for that reason, and `tests/fm-claude-stow-guard.test.sh` runs the script in every case, so a syntax error fails the tests before it can land; to recover a home that has one anyway, fix the script or remove its two entries from `.claude/settings.json`.
+
 The hook's own header in [`bin/fm-claude-stow-guard.sh`](../bin/fm-claude-stow-guard.sh) owns the transcript fields it reads and its exact decisions; [`docs/verification/stow-memory.md`](verification/stow-memory.md) records the Claude Code evidence.
 
 ## Secondmate routes (data/secondmates.md)

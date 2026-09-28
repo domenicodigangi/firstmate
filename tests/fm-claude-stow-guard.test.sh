@@ -410,6 +410,25 @@ test_markers_keep_only_current_session() {
   pass "markers: a new session gets its own nudge and older sessions' markers are dropped"
 }
 
+test_misregistration_never_blocks() {
+  local dir t rc payload
+  dir=$(make_primary_dir "$TMP_ROOT/usage")
+  t="$dir/t.jsonl"
+  add_usage "$t" 310000
+  payload=$(jq -cn --arg t "$t" '{session_id: "s", transcript_path: $t, hook_event_name: "Stop"}')
+  for mode in none --pre-compact stop; do
+    rc=0
+    if [ "$mode" = none ]; then
+      printf '%s' "$payload" | FM_ROOT_OVERRIDE="$dir" "$GUARD" 2> "$TMP_ROOT/err" || rc=$?
+    else
+      printf '%s' "$payload" | FM_ROOT_OVERRIDE="$dir" "$GUARD" "$mode" 2> "$TMP_ROOT/err" || rc=$?
+    fi
+    [ "$rc" -eq 1 ] || fail "mode '$mode' must fail with exit 1, never the blocking exit 2; got $rc"
+    grep -q 'usage:' "$TMP_ROOT/err" || fail "mode '$mode' must print usage"
+  done
+  pass "usage: an unknown or missing mode exits 1, which Claude Code never reads as a block"
+}
+
 test_tracked_settings_register_guard() {
   local settings="$ROOT/.claude/settings.json"
   jq -e '.autoCompactWindow == 300000' "$settings" >/dev/null ||
@@ -435,6 +454,7 @@ test_stop_kick_window_resolution
 test_precompact_auto_bounds
 test_scope_and_foreign_hosts
 test_markers_keep_only_current_session
+test_misregistration_never_blocks
 test_tracked_settings_register_guard
 
 echo "all fm-claude-stow-guard tests passed"
