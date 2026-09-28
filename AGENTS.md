@@ -81,6 +81,7 @@ config/supervision-branch-model config/supervision-branch-effort  Pi supervision
 config/supervision-host  optional opt-in to the supervision host, which runs the supervision branch's contract on a headless engine beside a non-Pi primary in the away posture; LOCAL, gitignored, not inherited; absent changes nothing; see docs/configuration.md "Supervision host"
 config/startup-memory-budget     primary-authoritative per-home startup-memory budget; LOCAL, gitignored, materialized as 7,500 estimated tokens by locked primary bootstrap and inherited into secondmate homes; see docs/configuration.md "Startup memory budget"
 config/stow-pass-horizon  optional presence flag opting this home in to /stow's default-off pass-count decay horizon; LOCAL, gitignored, and not inherited; see docs/configuration.md "Stow pass horizon"
+config/claude-stow-threshold  optional Claude stow-then-compact threshold in context tokens (default 300000) or "off"; LOCAL, gitignored, and not inherited; see docs/configuration.md "Stow before compaction"
 config/herdr-presentation-spaces  optional "off" opt-out from, or "on" opt-in to, Herdr's default-on disposable single-task visual projection, which is unconfigured-default-on only at or above a Herdr version floor; LOCAL, gitignored; inherited by secondmate homes; see docs/herdr-backend.md "Presentation spaces"
 config/trace-context  optional presence flag enabling default-off native W3C trace-context propagation to spawned agents; LOCAL, gitignored; inherited by secondmate homes; see docs/configuration.md "Trace context propagation" and docs/trace-context.md
 config/lavish-axi-host  optional one-line per-machine Lavish server address; LOCAL, gitignored, inherited by secondmate homes, and exported into every worker launch; see docs/configuration.md "Lavish server address" for opening versus polling
@@ -159,6 +160,7 @@ state/               runtime records and signals; gitignored
   .lock-session      trusted Claude session-lock sidecar; written only by bin/fm-lock.sh; never touch
   .watch.lock .wake-queue.lock watcher singleton and queue serialization locks
   .claude-autoarm.lock .claude-autoarm-epoch .claude-autoarm-failure-notified .claude-autoarm-failure-alarmed .turnend-claude-blocks .turnend-claude-blocks.lock   Claude Stop auto-arm single-flight, epoch, failure-episode, attended-alarm, guard-budget, and budget-lock records; never touch
+  .claude-stow-guard  once-per-compaction-cycle records of the Claude stow guard (bin/fm-claude-stow-guard.sh); safe to delete
   .cursor-park-owner .cursor-park-owner.lock .turnend-cursor-blocks   Cursor stop-hook owner record, publication and commit lock, and bounded repair-nag budget; never touch
   .hash-* .count-* .stale-* .stale-since-* .churn-since-* .paused-* .wedge-escalations-* .dead-reported-* .writing-* .waiting-* .seen-* .hb-surfaced-* .last-* .heartbeat-streak .secondmate-liveness-tick .secondmate-liveness-*.lock*   watcher internals; never touch
   .secondmate-relaunch-<id> .secondmate-relaunch-bound-<id>   durable relaunch history and parked-bound state; never touch (bin/fm-secondmate-liveness-lib.sh owns the ledger contract)

@@ -10,7 +10,7 @@ Start with the directory layout, then use the setting reference for the behavior
 | Firstmate's code, private files, or project location | [FM_HOME](#fm_home) and [operational home layout](#operational-home-layout-and-state) |
 | Task windows and worker tools | [Runtime backend](#runtime-backend-configbackend--fm_backend) and [harness support](#harness-support) |
 | Worker permissions, accounts, or environment | [Claude permission mode](#claude-permission-mode-configclaude-permission-mode), [worker account pin](#worker-account-pin-configclaude-account-configpi-account), and [worker launch environment](#worker-launch-environment-configlaunch-env-allowlist) |
-| Backlog, preferences, and memory | [Backlog backend](#backlog-backend-taskstoml--configbacklog-backend), [captain preferences](#captain-preferences-datacaptainmd--datacaptain-sharedmd), and [startup memory budget](#startup-memory-budget-configstartup-memory-budget) |
+| Backlog, preferences, and memory | [Backlog backend](#backlog-backend-taskstoml--configbacklog-backend), [captain preferences](#captain-preferences-datacaptainmd--datacaptain-sharedmd), [startup memory budget](#startup-memory-budget-configstartup-memory-budget), and [stow before compaction](#stow-before-compaction-configclaude-stow-threshold) |
 | Supervision and presentation | [Pi supervision branch](#pi-supervision-branch), [supervision host](#supervision-host-configsupervision-host), and [Calm preference](#calm-preference-configcalm) |
 | Persistent secondmates | [Secondmate routes](#secondmate-routes-datasecondmatesmd) |
 | Per-run overrides and tuning | [Environment variables](#environment-variables) |
@@ -658,6 +658,56 @@ The flag is per home and is not inherited by secondmate homes, because stow cade
 Only the file's presence is read, so its contents are ignored; remove it to return to the default contract on the next pass.
 
 The skill text owns the marker spelling, the tick order, and the reinforcement rule.
+
+## Stow before compaction (config/claude-stow-threshold)
+
+A Claude primary session, in the main home or a secondmate home, stows and then compacts as one automatic sequence.
+When the context reaches the stow threshold, the session runs `/stow`, and compaction follows as soon as the stow finishes.
+Both settings default to 300,000 tokens of context:
+
+| Setting | Default | Where it is set |
+| --- | --- | --- |
+| Compaction window | `300000` | Claude Code's own `autoCompactWindow`, defaulted in the tracked `.claude/settings.json`. |
+| Stow threshold | `300000` | The local, gitignored `config/claude-stow-threshold`. |
+
+On its own, Claude Code would compact once the context reaches its window minus a fixed reserve, about 267,000 tokens with the 300,000 default.
+The guard holds that compaction back until the stow at the threshold has finished, so compaction lands right after the stow, at the threshold plus the stow's own size.
+To move the window, set `autoCompactWindow` in the home's `.claude/settings.local.json` or export `CLAUDE_CODE_AUTO_COMPACT_WINDOW`, which Claude Code prefers over every settings file.
+`config/claude-stow-threshold` holds one positive integer, or `off` to disable the routine; an absent, empty, or malformed file keeps the `300000` default.
+The file is per home and is not inherited by secondmate homes.
+
+What happens:
+
+- At the first turn end at or past the stow threshold, the turn is held open once with an instruction to run `/stow` now.
+- At the turn end that finishes the stow, if Claude Code's compaction point is already passed, the turn is held open once more for a one-line reply, and Claude Code compacts before sending that reply.
+  Compaction therefore follows the stow at once instead of waiting for the next message.
+- Until a counting stow has finished, automatic compaction is deferred while the context is past 200,000 tokens and below the threshold plus 100,000 tokens, capped at 950,000.
+  Past the ceiling, compaction runs anyway and is reported, so a stow that never comes cannot push the session into its hard limit.
+- For the automatic guard, only a stow that the captain typed or the model ran at or past the stow threshold counts; an earlier stow in the cycle does not defer automatic compaction.
+  A `/compact` the captain types needs a stow anywhere in the cycle, and the next compaction starts a new cycle.
+- A `/compact` typed with no stow since the previous compaction is refused once with a reminder to stow first; typing `/compact` again compacts anyway.
+- A compaction that ran with no stow since the previous one is reported at the next turn end, with its trigger and size, together with an instruction to stow what survived.
+
+Limits:
+
+- No hook can run a stow inside a compaction, because a stow needs a model turn, and no hook can start a compaction; the guard can only defer a compaction and hand Claude Code the request it compacts before.
+- The stow runs at the first turn end past the threshold, so a long turn carries the context past it first; in the live run one long turn ended at about 352,000 tokens.
+- Deferral starts only past 200,000 tokens, the smallest Claude context window, because a larger prompt proves the model has the 1M-token window.
+  A model with the 200,000-token window compacts on its own at about 167,000 tokens, before any stow threshold above that is reached; that compaction is reported afterwards.
+- When Claude Code prepares a summary in the background, it runs the compaction hook as the summary starts and later swaps the summary in without asking again, so only the report covers a summary started before the deferral applies.
+
+If the guard itself fails:
+
+- A compaction hook that exits with any code other than 0 or 2, crashes, or times out does not stop the compaction: manual and automatic compactions proceed, and nothing about the failure reaches the transcript.
+  A working turn-end guard then reports the compaction as one with no stow.
+- A turn-end hook that fails the same way lets the turn end normally; Claude Code records the failure in the transcript, but the model is not told, so that turn end neither asks for a stow nor reports anything.
+  The guard tries again at the next turn end, and while it keeps failing, automatic compaction stays deferred until the 400,000-token ceiling and then runs without a stow.
+- Claude Code gives a hook 600 seconds by default, and the guard's entries set no shorter limit, so a hung guard stalls that turn end or compaction for up to 10 minutes before Claude Code carries on as above.
+- Exit code 2 is the one failure that blocks, because Claude Code reads it as a deliberate hold, and bash exits with 2 when the script cannot be parsed.
+  A guard with a syntax error therefore holds every turn end open again and again, ending only at a turn limit such as `--max-turns`, and refuses every compaction, manual or automatic, which can run the session into its hard limit.
+  The guard's own usage error exits 1 for that reason, and `tests/fm-claude-stow-guard.test.sh` runs the script in every case, so a syntax error fails the tests before it can land; to recover a home that has one anyway, fix the script or remove its two entries from `.claude/settings.json`.
+
+The hook's own header in [`bin/fm-claude-stow-guard.sh`](../bin/fm-claude-stow-guard.sh) owns the transcript fields it reads and its exact decisions; [`docs/verification/stow-memory.md`](verification/stow-memory.md) records the Claude Code evidence.
 
 ## Secondmate routes (data/secondmates.md)
 
