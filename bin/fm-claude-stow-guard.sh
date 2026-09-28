@@ -1,21 +1,26 @@
 #!/usr/bin/env bash
-# Stow-before-compaction guard for a Claude PRIMARY session (main home or
-# marked secondmate home). Registered twice in tracked .claude/settings.json:
+# Stow-then-compact guard for a Claude PRIMARY session (main home or marked
+# secondmate home). Registered twice in tracked .claude/settings.json:
 #
 #   --stop        synchronous Stop hook. Once the session's context reaches
-#                 the stow threshold, it blocks the turn end ONCE per
-#                 compaction cycle with an instruction to run /stow now. It
-#                 also reports, once, a compaction that happened with no stow
-#                 since the previous compaction.
-#   --precompact  PreCompact hook. When no stow ran since the previous
-#                 compaction it blocks compaction where that is safe (below),
-#                 so the Stop nudge gets the chance to run first.
+#                 the stow threshold with no stow in the current compaction
+#                 cycle, it blocks the turn end ONCE per cycle with an
+#                 instruction to run /stow now. At the turn end that follows a
+#                 stow, when Claude Code's own compaction point is already
+#                 passed, it blocks the turn end ONCE more so the model sends
+#                 one more request: Claude Code runs its automatic compaction
+#                 before that request, so compaction follows the stow at once
+#                 instead of waiting for the next prompt. It also reports,
+#                 once, a compaction that happened with no stow since the
+#                 previous compaction.
+#   --precompact  PreCompact hook. It holds back a compaction that no finished
+#                 stow licenses (below), so the stow runs first.
 #
-# A stow needs a model turn, so it can never run inside a compaction hook;
-# the Stop nudge is what actually gets the stow done, and the PreCompact block
-# only buys the time for it. docs/configuration.md "Stow before compaction"
-# owns the operator-facing contract and the two thresholds;
-# docs/verification/stow-memory.md records the Claude Code evidence.
+# A stow needs a model turn, so it can never run inside a compaction hook,
+# and no hook can start a compaction; the Stop hook is what gets the stow
+# done and then hands Claude Code the request it compacts before.
+# docs/configuration.md "Stow before compaction" owns the operator-facing
+# contract; docs/verification/stow-memory.md records the Claude Code evidence.
 #
 # Compaction cycle: the part of the session transcript after its newest
 # compact boundary entry ({"type":"system","subtype":"compact_boundary"}), or
@@ -25,34 +30,38 @@
 # Context size: the newest main-chain (isSidechain not true) assistant entry
 # in the current cycle whose message.usage is non-zero, measured as
 # message.usage.input_tokens + cache_creation_input_tokens +
-# cache_read_input_tokens. That is the prompt size Claude Code itself compares
-# against its auto-compact threshold. With no such entry in the cycle (a
-# compaction just ran) the context reads as 0.
+# cache_read_input_tokens. That is the prompt size Claude Code itself starts
+# from when it checks its auto-compact threshold. With no such entry in the
+# cycle (a compaction just ran) the context reads as 0.
 #
 # A stow counts when the cycle contains either a main-chain user entry whose
 # string content carries <command-name>/stow</command-name> (the captain typed
 # /stow) or a main-chain assistant tool_use of Skill with input.skill "stow"
-# (the model invoked the skill).
+# (the model invoked the skill). A stow has FINISHED once a turn end follows
+# it: the Stop hook then records a "stowed" marker for the cycle.
 #
 # Stow threshold: config/claude-stow-threshold holds one positive integer
 # token count, or "off" to disable both modes; absent or malformed means the
-# 270000 default. The compaction window is Claude Code's own autoCompactWindow
-# (tracked default 350000 in .claude/settings.json), resolved here in Claude's
-# order for the block ceiling: CLAUDE_CODE_AUTO_COMPACT_WINDOW, then
-# autoCompactWindow in .claude/settings.local.json, .claude/settings.json, and
-# ~/.claude/settings.json.
+# 300000 default. Compaction window W: Claude Code's own autoCompactWindow
+# (tracked default 300000 in .claude/settings.json), resolved in Claude
+# Code's order: CLAUDE_CODE_AUTO_COMPACT_WINDOW, then autoCompactWindow in
+# .claude/settings.local.json, .claude/settings.json, and
+# ~/.claude/settings.json. Claude Code 2.1.283 compacts automatically at
+# W - 20000 - 13000 (267000 for the default); that is the compaction point
+# the post-stow block compares against. With no resolvable window the
+# post-stow block never fires.
 #
-# PreCompact decision when no stow ran in the current cycle:
-#   - trigger "manual": block once per cycle with an instruction to stow
-#     first; a second /compact in the same cycle compacts anyway.
-#   - trigger "auto": block only while stow threshold <= context < ceiling,
-#     where the ceiling is the resolved window capped at 950000 tokens, below
-#     the hard limit of Claude's largest (1M-token) context window. Below the
-#     stow threshold the nudge has not had its chance (Claude Code's
-#     background precompute arms there, or the model's own window is smaller
-#     than the threshold), and at or past the ceiling the block would only
-#     push the session toward its hard limit, so both allow. With no
-#     resolvable window it allows.
+# PreCompact decision:
+#   - trigger "manual": when no stow ran in the current cycle, block once per
+#     cycle with an instruction to stow first; a second /compact in the same
+#     cycle compacts anyway.
+#   - trigger "auto": allow once the cycle's stow has finished. Otherwise
+#     block while 200000 < context < ceiling, where the ceiling is the stow
+#     threshold plus 100000 tokens, capped at 950000. 200000 is the smallest
+#     Claude context window, so a prompt past it proves the model has the
+#     1M-token window and holding compaction cannot run it into its hard
+#     limit; at or past the ceiling the stow has had its chance and the block
+#     would only push the session toward that limit. Both sides allow.
 # Every other case allows silently. On allow this hook prints nothing: a
 # PreCompact hook's stdout becomes extra compaction instructions.
 #
@@ -75,8 +84,12 @@ FM_ROOT="${FM_ROOT_OVERRIDE:-$(cd "$SCRIPT_DIR/.." && pwd)}"
 FM_HOME="${FM_HOME:-${FM_ROOT_OVERRIDE:-$FM_ROOT}}"
 STATE="${FM_STATE_OVERRIDE:-$FM_HOME/state}"
 CONFIG="${FM_CONFIG_OVERRIDE:-$FM_HOME/config}"
-DEFAULT_STOW_THRESHOLD=270000
+DEFAULT_STOW_THRESHOLD=300000
+SMALLEST_CONTEXT_WINDOW=200000
+BLOCK_HEADROOM=100000
 MAX_BLOCK_CEILING=950000
+# Claude Code 2.1.283 compacts at window - min(max output, 20000) - 13000.
+COMPACT_RESERVE=33000
 MARKERS="$STATE/.claude-stow-guard"
 
 MODE=
@@ -236,22 +249,22 @@ EOF
 fi
 
 if [ "$MODE" = precompact ]; then
-  slice_has_stow "$CUR" 0 && exit 0
   case "$TRIGGER" in
     manual)
+      slice_has_stow "$CUR" 0 && exit 0
       marker_present precompact-manual "$CYCLE_KEY" && exit 0
       marker_record precompact-manual "$CYCLE_KEY" || exit 0
       printf 'No /stow has run since the previous compaction, so this session'"'"'s uncaptured knowledge would be lost to the summary. Run /stow first, then /compact. Run /compact again to compact without a stow.\n' >&2
       exit 2
       ;;
     auto)
+      marker_present stowed "$CYCLE_KEY" && exit 0
       TOKENS=$(cycle_context_tokens "$CUR")
-      [ "$TOKENS" -ge "$THRESHOLD" ] || exit 0
-      WINDOW=$(compact_window)
-      [ -n "$WINDOW" ] || exit 0
-      [ "$WINDOW" -le "$MAX_BLOCK_CEILING" ] || WINDOW=$MAX_BLOCK_CEILING
-      [ "$TOKENS" -lt "$WINDOW" ] || exit 0
-      printf 'Automatic compaction deferred: context is at %s tokens and no /stow has run since the previous compaction. The turn-end stow nudge runs /stow first; compaction proceeds once a stow has run or the context reaches %s tokens.\n' "$TOKENS" "$WINDOW" >&2
+      [ "$TOKENS" -gt "$SMALLEST_CONTEXT_WINDOW" ] || exit 0
+      CEILING=$((THRESHOLD + BLOCK_HEADROOM))
+      [ "$CEILING" -le "$MAX_BLOCK_CEILING" ] || CEILING=$MAX_BLOCK_CEILING
+      [ "$TOKENS" -lt "$CEILING" ] || exit 0
+      printf 'Automatic compaction deferred: context is at %s tokens and no /stow has finished since the previous compaction. The stow runs at the turn end past %s tokens and compaction follows right after it; compaction proceeds without a stow at %s tokens.\n' "$TOKENS" "$THRESHOLD" "$CEILING" >&2
       exit 2
       ;;
   esac
@@ -260,6 +273,7 @@ fi
 
 # --- Stop mode ------------------------------------------------------------------
 MESSAGE=
+TOKENS=$(cycle_context_tokens "$CUR")
 
 # A compaction that ran with no stow since the previous one is reported once,
 # unless a stow already ran after it.
@@ -274,11 +288,24 @@ if [ "$CUR" -gt 0 ] && ! marker_present audited "$CYCLE_KEY"; then
   fi
 fi
 
-if ! marker_present nudged "$CYCLE_KEY"; then
-  TOKENS=$(cycle_context_tokens "$CUR")
-  if [ "$TOKENS" -ge "$THRESHOLD" ] && ! slice_has_stow "$CUR" 0 && marker_record nudged "$CYCLE_KEY"; then
-    MESSAGE="${MESSAGE:+$MESSAGE }Context is at $TOKENS tokens, past the $THRESHOLD-token stow threshold, and compaction comes next."
-  fi
+if slice_has_stow "$CUR" 0; then
+  # The first turn end after a stow finishes it. When Claude Code's own
+  # compaction point is already passed, hold this turn end once more so the
+  # next request, which Claude Code compacts before, happens now.
+  marker_present stowed "$CYCLE_KEY" && exit 0
+  marker_record stowed "$CYCLE_KEY" || exit 0
+  WINDOW=$(compact_window)
+  [ -n "$WINDOW" ] || exit 0
+  COMPACT_AT=$((WINDOW - COMPACT_RESERVE))
+  [ "$COMPACT_AT" -gt 0 ] && [ "$TOKENS" -ge "$COMPACT_AT" ] || exit 0
+  marker_present compact-kick "$CYCLE_KEY" && exit 0
+  marker_record compact-kick "$CYCLE_KEY" || exit 0
+  printf 'The stow is done. Context is at %s tokens, past the %s-token automatic compaction point, so Claude Code compacts before your next reply. Reply with one short line saying the stow is done and compaction follows, then end the turn.\n' "$TOKENS" "$COMPACT_AT" >&2
+  exit 2
+fi
+
+if ! marker_present nudged "$CYCLE_KEY" && [ "$TOKENS" -ge "$THRESHOLD" ] && marker_record nudged "$CYCLE_KEY"; then
+  MESSAGE="${MESSAGE:+$MESSAGE }Context is at $TOKENS tokens, past the $THRESHOLD-token stow threshold, and compaction follows the stow."
 fi
 
 [ -n "$MESSAGE" ] || exit 0

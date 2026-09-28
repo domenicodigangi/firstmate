@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
-# Behavior tests for bin/fm-claude-stow-guard.sh, the Claude stow-before-
-# compaction guard (docs/configuration.md "Stow before compaction").
+# Behavior tests for bin/fm-claude-stow-guard.sh, the Claude stow-then-
+# compact guard (docs/configuration.md "Stow before compaction").
 # Hermetic: each case builds a primary-shaped checkout and a synthetic Claude
 # transcript, then feeds the hook a Stop or PreCompact payload. No real agent
 # session is invoked.
@@ -109,21 +109,21 @@ test_stop_below_threshold_allows() {
   local dir t
   dir=$(make_primary_dir "$TMP_ROOT/below")
   t="$dir/t.jsonl"
-  add_usage "$t" 269999
+  add_usage "$t" 299999
   run_guard "$dir" stop "$t"
   expect_allow "context below the default threshold"
-  pass "stop: context below 270000 tokens ends the turn silently"
+  pass "stop: context below 300000 tokens ends the turn silently"
 }
 
 test_stop_nudges_once_per_cycle() {
   local dir t
   dir=$(make_primary_dir "$TMP_ROOT/once")
   t="$dir/t.jsonl"
-  add_usage "$t" 270000
+  add_usage "$t" 300000
   run_guard "$dir" stop "$t"
   expect_block "first stop past the threshold" "Invoke the stow skill now (/stow)"
-  case "$HOOK_ERR" in *"270000 tokens"*) : ;; *) fail "nudge must name the context size: $HOOK_ERR" ;; esac
-  add_usage "$t" 275000
+  case "$HOOK_ERR" in *"300000 tokens"*) : ;; *) fail "nudge must name the context size: $HOOK_ERR" ;; esac
+  add_usage "$t" 305000
   run_guard "$dir" stop "$t"
   expect_allow "second stop in the same cycle"
   pass "stop: the nudge blocks once at the threshold and not again in the same compaction cycle"
@@ -134,7 +134,7 @@ test_stop_counts_typed_and_skill_stow_only() {
   dir=$(make_primary_dir "$TMP_ROOT/typed")
   t="$dir/t.jsonl"
   add_typed_stow "$t"
-  add_usage "$t" 300000
+  add_usage "$t" 310000
   run_guard "$dir" stop "$t"
   expect_allow "typed /stow in the cycle"
 
@@ -142,14 +142,14 @@ test_stop_counts_typed_and_skill_stow_only() {
   t="$dir/t.jsonl"
   add_usage "$t" 280000
   add_skill_stow "$t"
-  add_usage "$t" 300000
+  add_usage "$t" 310000
   run_guard "$dir" stop "$t"
   expect_allow "Skill stow in the cycle"
 
   dir=$(make_primary_dir "$TMP_ROOT/quoted")
   t="$dir/t.jsonl"
   add_quoted_stow "$t"
-  add_usage "$t" 300000
+  add_usage "$t" 310000
   run_guard "$dir" stop "$t"
   expect_block "quoted stow text only" "/stow"
   pass "stop: a typed /stow or a Skill stow satisfies the cycle, while quoted stow text does not"
@@ -164,10 +164,10 @@ test_stop_ignores_sidechain_and_zero_usage() {
   add_zero_usage "$t"
   run_guard "$dir" stop "$t"
   expect_allow "sidechain usage and a zero-usage entry after it"
-  add_usage "$t" 270001
+  add_usage "$t" 300001
   add_zero_usage "$t"
   run_guard "$dir" stop "$t"
-  expect_block "main-chain usage behind a zero-usage entry" "270001 tokens"
+  expect_block "main-chain usage behind a zero-usage entry" "300001 tokens"
   pass "stop: context size comes from the newest non-zero main-chain usage only"
 }
 
@@ -175,10 +175,10 @@ test_stop_tolerates_partial_last_line() {
   local dir t
   dir=$(make_primary_dir "$TMP_ROOT/partial")
   t="$dir/t.jsonl"
-  add_usage "$t" 290000
+  add_usage "$t" 310000
   printf '{"type":"assistant","message":{"usage":{"input_tok' >> "$t"
   run_guard "$dir" stop "$t"
-  expect_block "partial trailing entry" "290000 tokens"
+  expect_block "partial trailing entry" "310000 tokens"
   pass "stop: a partially written trailing entry does not hide the context size"
 }
 
@@ -186,18 +186,18 @@ test_stop_new_cycle_after_compaction() {
   local dir t
   dir=$(make_primary_dir "$TMP_ROOT/cycle")
   t="$dir/t.jsonl"
-  add_usage "$t" 280000
+  add_usage "$t" 300000
   run_guard "$dir" stop "$t"
   expect_block "cycle 1 nudge" "/stow"
   add_skill_stow "$t"
-  add_usage "$t" 300000
-  add_boundary "$t" auto 317000
+  add_usage "$t" 310000
+  add_boundary "$t" auto 310500
   run_guard "$dir" stop "$t"
   expect_allow "right after a stowed compaction (pre-compaction usage is not counted)"
   add_usage "$t" 60000
-  add_usage "$t" 281000
+  add_usage "$t" 301000
   run_guard "$dir" stop "$t"
-  expect_block "cycle 2 nudge" "281000 tokens"
+  expect_block "cycle 2 nudge" "301000 tokens"
   pass "stop: each compaction starts a new cycle with its own nudge, and pre-compaction usage is not counted"
 }
 
@@ -244,13 +244,13 @@ test_threshold_config() {
   dir=$(make_primary_dir "$TMP_ROOT/cfg-bad")
   t="$dir/t.jsonl"
   printf 'lots\n' > "$dir/config/claude-stow-threshold"
-  add_usage "$t" 200000
+  add_usage "$t" 250000
   run_guard "$dir" stop "$t"
   expect_allow "malformed threshold falls back to the default (below it)"
-  add_usage "$t" 270000
+  add_usage "$t" 300000
   run_guard "$dir" stop "$t"
-  expect_block "malformed threshold falls back to the default (at it)" "270000-token stow threshold"
-  pass "config: off disables the guard, an integer sets the threshold, and a malformed value keeps the 270000 default"
+  expect_block "malformed threshold falls back to the default (at it)" "300000-token stow threshold"
+  pass "config: off disables the guard, an integer sets the threshold, and a malformed value keeps the 300000 default"
 }
 
 test_precompact_manual_blocks_once() {
@@ -272,56 +272,95 @@ test_precompact_manual_blocks_once() {
   pass "precompact: manual compaction without a stow is blocked once per cycle, and a stow lets it through"
 }
 
-test_precompact_auto_window_bounds() {
+test_stop_kicks_compaction_right_after_stow() {
+  local dir t
+  dir=$(make_primary_dir "$TMP_ROOT/kick")
+  t="$dir/t.jsonl"
+  add_usage "$t" 300000
+  CLAUDE_CODE_AUTO_COMPACT_WINDOW=300000 run_guard "$dir" stop "$t"
+  expect_block "nudge at the threshold" "Invoke the stow skill now (/stow)"
+  add_skill_stow "$t"
+  add_usage "$t" 331000
+  CLAUDE_CODE_AUTO_COMPACT_WINDOW=300000 run_guard "$dir" precompact "$t" auto
+  expect_block "auto compaction while the stow is still running" "Automatic compaction deferred"
+  CLAUDE_CODE_AUTO_COMPACT_WINDOW=300000 run_guard "$dir" stop "$t"
+  expect_block "turn end that finishes the stow" "past the 267000-token automatic compaction point"
+  case "$HOOK_ERR" in *"The stow is done. Context is at 331000 tokens"*) : ;; *) fail "the post-stow block must name the context size: $HOOK_ERR" ;; esac
+  CLAUDE_CODE_AUTO_COMPACT_WINDOW=300000 run_guard "$dir" precompact "$t" auto
+  expect_allow "auto compaction once the stow has finished"
+  CLAUDE_CODE_AUTO_COMPACT_WINDOW=300000 run_guard "$dir" stop "$t"
+  expect_allow "a later turn end in the same cycle"
+
+  dir=$(make_primary_dir "$TMP_ROOT/kick-early")
+  t="$dir/t.jsonl"
+  add_usage "$t" 100000
+  add_typed_stow "$t"
+  add_usage "$t" 120000
+  CLAUDE_CODE_AUTO_COMPACT_WINDOW=300000 run_guard "$dir" stop "$t"
+  expect_allow "a stow that finishes below the compaction point"
+  add_usage "$t" 305000
+  CLAUDE_CODE_AUTO_COMPACT_WINDOW=300000 run_guard "$dir" stop "$t"
+  expect_allow "the threshold after a finished stow in the same cycle"
+  CLAUDE_CODE_AUTO_COMPACT_WINDOW=300000 run_guard "$dir" precompact "$t" auto
+  expect_allow "auto compaction after an earlier finished stow"
+  pass "stop: the turn end after a stow holds once more when compaction is due, so compaction follows the stow at once"
+}
+
+test_stop_kick_window_resolution() {
+  local dir t
+  dir=$(make_primary_dir "$TMP_ROOT/kick-window")
+  t="$dir/t.jsonl"
+  mkdir -p "$dir/.claude" "$HOME/.claude"
+  add_typed_stow "$t"
+  add_usage "$t" 330000
+  printf '{"autoCompactWindow": 350000}\n' > "$dir/.claude/settings.json"
+  printf '{"autoCompactWindow": 300000}\n' > "$dir/.claude/settings.local.json"
+  run_guard "$dir" stop "$t" '' local-wins
+  expect_block "local settings window wins over project settings" "267000-token automatic compaction point"
+  CLAUDE_CODE_AUTO_COMPACT_WINDOW=400000 run_guard "$dir" stop "$t" '' env-wins
+  expect_allow "environment window wins over settings (compaction point 367000 not reached)"
+  rm -f "$dir/.claude/settings.local.json"
+  run_guard "$dir" stop "$t" '' project
+  expect_block "project settings window" "317000-token automatic compaction point"
+  rm -f "$dir/.claude/settings.json"
+  printf '{"autoCompactWindow": 320000}\n' > "$HOME/.claude/settings.json"
+  run_guard "$dir" stop "$t" '' user
+  rm -f "$HOME/.claude/settings.json"
+  expect_block "user settings window" "287000-token automatic compaction point"
+  run_guard "$dir" stop "$t" '' none
+  expect_allow "no resolvable window"
+  pass "stop: the compaction point resolves the window from env, local, project, then user settings"
+}
+
+test_precompact_auto_bounds() {
   local dir t
   dir=$(make_primary_dir "$TMP_ROOT/auto")
   t="$dir/t.jsonl"
-  add_usage "$t" 318000
-  CLAUDE_CODE_AUTO_COMPACT_WINDOW=350000 run_guard "$dir" precompact "$t" auto
-  expect_block "auto compaction inside the deferral band" "Automatic compaction deferred"
-  CLAUDE_CODE_AUTO_COMPACT_WINDOW=350000 run_guard "$dir" precompact "$t" auto
-  expect_block "auto compaction inside the band again" "reaches 350000 tokens"
-
-  add_usage "$t" 264000
-  CLAUDE_CODE_AUTO_COMPACT_WINDOW=350000 run_guard "$dir" precompact "$t" auto
-  expect_allow "auto compaction below the stow threshold (background precompute)"
-  add_usage "$t" 350000
-  CLAUDE_CODE_AUTO_COMPACT_WINDOW=350000 run_guard "$dir" precompact "$t" auto
-  expect_allow "auto compaction at the window"
-  add_usage "$t" 300000
+  add_usage "$t" 250000
   run_guard "$dir" precompact "$t" auto
-  expect_allow "auto compaction with no resolvable window"
+  expect_block "unstowed auto compaction past 200000 tokens" "compaction follows right after it"
+  run_guard "$dir" precompact "$t" auto
+  expect_block "the same deferral again" "proceeds without a stow at 400000 tokens"
+  add_usage "$t" 200000
+  run_guard "$dir" precompact "$t" auto
+  expect_allow "auto compaction at or below the smallest context window"
+  add_usage "$t" 399999
+  run_guard "$dir" precompact "$t" auto
+  expect_block "just below the ceiling" "Automatic compaction deferred"
+  add_usage "$t" 400000
+  run_guard "$dir" precompact "$t" auto
+  expect_allow "at the ceiling (threshold plus 100000)"
 
-  add_skill_stow "$t"
-  CLAUDE_CODE_AUTO_COMPACT_WINDOW=350000 run_guard "$dir" precompact "$t" auto
-  expect_allow "auto compaction after a stow"
-  pass "precompact: automatic compaction is deferred only between the stow threshold and the window, and never after a stow"
-}
-
-test_precompact_window_resolution_and_cap() {
-  local dir t
-  dir=$(make_primary_dir "$TMP_ROOT/window-settings")
+  dir=$(make_primary_dir "$TMP_ROOT/auto-cap")
   t="$dir/t.jsonl"
-  mkdir -p "$dir/.claude"
-  printf '{"autoCompactWindow": 350000}\n' > "$dir/.claude/settings.json"
-  printf '{"autoCompactWindow": 300000}\n' > "$dir/.claude/settings.local.json"
-  add_usage "$t" 310000
+  printf '900000\n' > "$dir/config/claude-stow-threshold"
+  add_usage "$t" 949999
   run_guard "$dir" precompact "$t" auto
-  expect_allow "local settings window wins over project settings"
-  CLAUDE_CODE_AUTO_COMPACT_WINDOW=400000 run_guard "$dir" precompact "$t" auto
-  expect_block "environment window wins over settings" "reaches 400000 tokens"
-
-  rm -f "$dir/.claude/settings.local.json" "$dir/.claude/settings.json"
-  mkdir -p "$HOME/.claude"
-  printf '{"autoCompactWindow": 1000000}\n' > "$HOME/.claude/settings.json"
-  add_usage "$t" 900000
+  expect_block "high threshold, below the cap" "proceeds without a stow at 950000 tokens"
+  add_usage "$t" 950000
   run_guard "$dir" precompact "$t" auto
-  expect_block "user settings window, capped" "reaches 950000 tokens"
-  add_usage "$t" 960000
-  run_guard "$dir" precompact "$t" auto
-  rm -f "$HOME/.claude/settings.json"
-  expect_allow "context past the 950000 ceiling"
-  pass "precompact: the window resolves env, local, project, then user settings, and the block never reaches past 950000 tokens"
+  expect_allow "high threshold, at the 950000 cap"
+  pass "precompact: unstowed automatic compaction is deferred between 200000 tokens and the threshold plus 100000, capped at 950000"
 }
 
 test_scope_and_foreign_hosts() {
@@ -360,7 +399,7 @@ test_markers_keep_only_current_session() {
   local dir t
   dir=$(make_primary_dir "$TMP_ROOT/sessions")
   t="$dir/t.jsonl"
-  add_usage "$t" 280000
+  add_usage "$t" 300000
   run_guard "$dir" stop "$t" '' old-session
   expect_block "old session nudge" "/stow"
   run_guard "$dir" stop "$t" '' new-session
@@ -373,13 +412,13 @@ test_markers_keep_only_current_session() {
 
 test_tracked_settings_register_guard() {
   local settings="$ROOT/.claude/settings.json"
-  jq -e '.autoCompactWindow == 350000' "$settings" >/dev/null ||
-    fail "tracked Claude settings must default autoCompactWindow to 350000"
+  jq -e '.autoCompactWindow == 300000' "$settings" >/dev/null ||
+    fail "tracked Claude settings must default autoCompactWindow to 300000"
   jq -e '[.hooks.Stop[].hooks[] | select(.asyncRewake != true) | .command | select(test("fm-claude-stow-guard.sh --stop$"))] | length == 1' "$settings" >/dev/null ||
     fail "tracked Claude settings must register the synchronous Stop stow guard"
   jq -e '[.hooks.PreCompact[].hooks[].command | select(test("fm-claude-stow-guard.sh --precompact$"))] | length == 1' "$settings" >/dev/null ||
     fail "tracked Claude settings must register the PreCompact stow guard"
-  pass "settings: tracked Claude settings default the compaction window to 350000 and register both guard hooks"
+  pass "settings: tracked Claude settings default the compaction window to 300000 and register both guard hooks"
 }
 
 test_stop_below_threshold_allows
@@ -391,8 +430,9 @@ test_stop_new_cycle_after_compaction
 test_stop_reports_unstowed_compaction_once
 test_threshold_config
 test_precompact_manual_blocks_once
-test_precompact_auto_window_bounds
-test_precompact_window_resolution_and_cap
+test_stop_kicks_compaction_right_after_stow
+test_stop_kick_window_resolution
+test_precompact_auto_bounds
 test_scope_and_foreign_hosts
 test_markers_keep_only_current_session
 test_tracked_settings_register_guard
