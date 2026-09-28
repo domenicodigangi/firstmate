@@ -22,6 +22,15 @@ document:
     evidence destination, and unique safety facts, then review the complete
     branch diff again after every documentation or lint fix.
 
+# Fill the PR narrative from this repo's own template instead of no-mistakes'
+# default fixed shape, so a no-mistakes-shipped PR reads the same What/Why/How
+# structure the pr-description skill (.agents/skills/pr-description/SKILL.md)
+# defines for direct-PR workers. The pipeline preserves the template's H1
+# headings and fills them from the final diff; it still appends its own
+# evidence sections separately.
+pr:
+  template: .github/pull_request_template.md
+
 # Pin lint to the same owner CI invokes instead of leaving it to no-mistakes'
 # default handling, which does not invoke the repository's canonical lint gate.
 # `bin/fm-lint.sh` owns the context-sensitive ShellCheck modes and GitHub
