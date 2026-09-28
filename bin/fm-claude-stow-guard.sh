@@ -206,7 +206,8 @@ slice_has_qualified_stow() {  # <after-line> <through-line|0> <threshold>
                      + ($e.message.usage.cache_read_input_tokens // 0)) as $tokens
                  | if $tokens > 0 then .tokens = $tokens else . end
              else . end)
-            | if (($e.type == "user" and (($e.message.content? // null) | type) == "string"
+            | if ($e.isSidechain | not)
+                 and (($e.type == "user" and (($e.message.content? // null) | type) == "string"
                     and ($e.message.content | contains("<command-name>/stow</command-name>")))
                    or ($e.type == "assistant"
                      and (($e.message.content? // null) | type) == "array"

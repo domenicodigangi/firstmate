@@ -56,8 +56,10 @@ add_typed_stow() {  # <transcript>
     message: {role: "user", content: "<command-message>stow</command-message>\n<command-name>/stow</command-name>"}}' >> "$1"
 }
 
-add_skill_stow() {  # <transcript>
-  jq -cn --arg u "$(next_uuid)" '{type: "assistant", isSidechain: false, uuid: $u,
+add_skill_stow() {  # <transcript> [sidechain]
+  local side=false
+  [ "${2:-}" = sidechain ] && side=true
+  jq -cn --arg u "$(next_uuid)" --argjson s "$side" '{type: "assistant", isSidechain: $s, uuid: $u,
     message: {role: "assistant", content: [{type: "tool_use", id: "toolu_1", name: "Skill", input: {skill: "stow"}}],
       usage: {input_tokens: 0, cache_creation_input_tokens: 0, cache_read_input_tokens: 0, output_tokens: 0}}}' >> "$1"
 }
@@ -153,7 +155,15 @@ test_stop_counts_typed_and_skill_stow_only() {
   add_usage "$t" 310000
   run_guard "$dir" stop "$t"
   expect_block "quoted stow text only" "/stow"
-  pass "stop: a typed /stow or a Skill stow at the threshold satisfies the cycle, while quoted stow text does not"
+
+  dir=$(make_primary_dir "$TMP_ROOT/sidechain-stow")
+  t="$dir/t.jsonl"
+  add_usage "$t" 300000
+  add_skill_stow "$t" sidechain
+  add_usage "$t" 310000
+  run_guard "$dir" stop "$t"
+  expect_block "a sidechain Skill stow past the threshold" "/stow"
+  pass "stop: a typed /stow or a main-chain Skill stow at the threshold satisfies the cycle, while quoted or sidechain stows do not"
 }
 
 test_early_stow_does_not_satisfy_guard() {
