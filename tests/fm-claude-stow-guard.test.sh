@@ -163,6 +163,8 @@ test_stop_counts_typed_and_skill_stow_only() {
   add_usage "$t" 310000
   run_guard "$dir" stop "$t"
   expect_block "a sidechain Skill stow past the threshold" "/stow"
+  CLAUDE_CODE_AUTO_COMPACT_WINDOW=300000 run_guard "$dir" precompact "$t" auto
+  expect_block "a sidechain Skill stow does not license automatic compaction" "Automatic compaction deferred"
   pass "stop: a typed /stow or a main-chain Skill stow at the threshold satisfies the cycle, while quoted or sidechain stows do not"
 }
 
