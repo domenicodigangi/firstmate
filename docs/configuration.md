@@ -681,9 +681,10 @@ What happens:
 - At the first turn end at or past the stow threshold, the turn is held open once with an instruction to run `/stow` now.
 - At the turn end that finishes the stow, if Claude Code's compaction point is already passed, the turn is held open once more for a one-line reply, and Claude Code compacts before sending that reply.
   Compaction therefore follows the stow at once instead of waiting for the next message.
-- Until a stow has finished, automatic compaction is deferred while the context is past 200,000 tokens and below the threshold plus 100,000 tokens, capped at 950,000.
+- Until a counting stow has finished, automatic compaction is deferred while the context is past 200,000 tokens and below the threshold plus 100,000 tokens, capped at 950,000.
   Past the ceiling, compaction runs anyway and is reported, so a stow that never comes cannot push the session into its hard limit.
-- A stow the captain types or the model runs counts for the whole cycle, including one that finished earlier in the cycle; the next compaction starts a new cycle.
+- For the automatic guard, only a stow that the captain typed or the model ran at or past the stow threshold counts; an earlier stow in the cycle does not defer automatic compaction.
+  A `/compact` the captain types needs a stow anywhere in the cycle, and the next compaction starts a new cycle.
 - A `/compact` typed with no stow since the previous compaction is refused once with a reminder to stow first; typing `/compact` again compacts anyway.
 - A compaction that ran with no stow since the previous one is reported at the next turn end, with its trigger and size, together with an instruction to stow what survived.
 

@@ -133,18 +133,19 @@ test_stop_counts_typed_and_skill_stow_only() {
   local dir t
   dir=$(make_primary_dir "$TMP_ROOT/typed")
   t="$dir/t.jsonl"
+  add_usage "$t" 300000
   add_typed_stow "$t"
   add_usage "$t" 310000
   run_guard "$dir" stop "$t"
-  expect_allow "typed /stow in the cycle"
+  expect_allow "typed /stow at the threshold"
 
   dir=$(make_primary_dir "$TMP_ROOT/skill")
   t="$dir/t.jsonl"
-  add_usage "$t" 280000
+  add_usage "$t" 300000
   add_skill_stow "$t"
   add_usage "$t" 310000
   run_guard "$dir" stop "$t"
-  expect_allow "Skill stow in the cycle"
+  expect_allow "Skill stow at the threshold"
 
   dir=$(make_primary_dir "$TMP_ROOT/quoted")
   t="$dir/t.jsonl"
@@ -152,7 +153,30 @@ test_stop_counts_typed_and_skill_stow_only() {
   add_usage "$t" 310000
   run_guard "$dir" stop "$t"
   expect_block "quoted stow text only" "/stow"
-  pass "stop: a typed /stow or a Skill stow satisfies the cycle, while quoted stow text does not"
+  pass "stop: a typed /stow or a Skill stow at the threshold satisfies the cycle, while quoted stow text does not"
+}
+
+test_early_stow_does_not_satisfy_guard() {
+  local dir t
+  dir=$(make_primary_dir "$TMP_ROOT/early-stow")
+  t="$dir/t.jsonl"
+  add_usage "$t" 150000
+  add_typed_stow "$t"
+  add_usage "$t" 267000
+  CLAUDE_CODE_AUTO_COMPACT_WINDOW=300000 run_guard "$dir" precompact "$t" auto
+  expect_block "auto compaction after only an early stow is deferred" "Automatic compaction deferred"
+  add_usage "$t" 300000
+  CLAUDE_CODE_AUTO_COMPACT_WINDOW=300000 run_guard "$dir" stop "$t"
+  expect_block "the threshold nudge still fires" "Invoke the stow skill now (/stow)"
+  add_skill_stow "$t"
+  add_usage "$t" 331000
+  CLAUDE_CODE_AUTO_COMPACT_WINDOW=300000 run_guard "$dir" precompact "$t" auto
+  expect_block "auto compaction before the fresh stow finishes" "Automatic compaction deferred"
+  CLAUDE_CODE_AUTO_COMPACT_WINDOW=300000 run_guard "$dir" stop "$t"
+  expect_block "the fresh stow licenses the post-stow hold" "past the 267000-token automatic compaction point"
+  CLAUDE_CODE_AUTO_COMPACT_WINDOW=300000 run_guard "$dir" precompact "$t" auto
+  expect_allow "auto compaction after the fresh stow finished"
+  pass "guard: an early stow does not satisfy it; a stow at or past the threshold licenses compaction"
 }
 
 test_stop_ignores_sidechain_and_zero_usage() {
@@ -290,20 +314,7 @@ test_stop_kicks_compaction_right_after_stow() {
   expect_allow "auto compaction once the stow has finished"
   CLAUDE_CODE_AUTO_COMPACT_WINDOW=300000 run_guard "$dir" stop "$t"
   expect_allow "a later turn end in the same cycle"
-
-  dir=$(make_primary_dir "$TMP_ROOT/kick-early")
-  t="$dir/t.jsonl"
-  add_usage "$t" 100000
-  add_typed_stow "$t"
-  add_usage "$t" 120000
-  CLAUDE_CODE_AUTO_COMPACT_WINDOW=300000 run_guard "$dir" stop "$t"
-  expect_allow "a stow that finishes below the compaction point"
-  add_usage "$t" 305000
-  CLAUDE_CODE_AUTO_COMPACT_WINDOW=300000 run_guard "$dir" stop "$t"
-  expect_allow "the threshold after a finished stow in the same cycle"
-  CLAUDE_CODE_AUTO_COMPACT_WINDOW=300000 run_guard "$dir" precompact "$t" auto
-  expect_allow "auto compaction after an earlier finished stow"
-  pass "stop: the turn end after a stow holds once more when compaction is due, so compaction follows the stow at once"
+  pass "stop: the turn end after a counting stow holds once more when compaction is due, so compaction follows the stow at once"
 }
 
 test_stop_kick_window_resolution() {
@@ -311,8 +322,8 @@ test_stop_kick_window_resolution() {
   dir=$(make_primary_dir "$TMP_ROOT/kick-window")
   t="$dir/t.jsonl"
   mkdir -p "$dir/.claude" "$HOME/.claude"
-  add_typed_stow "$t"
   add_usage "$t" 330000
+  add_typed_stow "$t"
   printf '{"autoCompactWindow": 350000}\n' > "$dir/.claude/settings.json"
   printf '{"autoCompactWindow": 300000}\n' > "$dir/.claude/settings.local.json"
   run_guard "$dir" stop "$t" '' local-wins
@@ -443,6 +454,7 @@ test_tracked_settings_register_guard() {
 test_stop_below_threshold_allows
 test_stop_nudges_once_per_cycle
 test_stop_counts_typed_and_skill_stow_only
+test_early_stow_does_not_satisfy_guard
 test_stop_ignores_sidechain_and_zero_usage
 test_stop_tolerates_partial_last_line
 test_stop_new_cycle_after_compaction

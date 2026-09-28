@@ -3,9 +3,9 @@
 # secondmate home). Registered twice in tracked .claude/settings.json:
 #
 #   --stop        synchronous Stop hook. Once the session's context reaches
-#                 the stow threshold with no stow in the current compaction
-#                 cycle, it blocks the turn end ONCE per cycle with an
-#                 instruction to run /stow now. At the turn end that follows a
+#                 the stow threshold with no counting stow in the current
+#                 compaction cycle, it blocks the turn end ONCE per cycle with
+#                 an instruction to run /stow now. At the turn end that follows a
 #                 stow, when Claude Code's own compaction point is already
 #                 passed, it blocks the turn end ONCE more so the model sends
 #                 one more request: Claude Code runs its automatic compaction
@@ -34,11 +34,13 @@
 # from when it checks its auto-compact threshold. With no such entry in the
 # cycle (a compaction just ran) the context reads as 0.
 #
-# A stow counts when the cycle contains either a main-chain user entry whose
-# string content carries <command-name>/stow</command-name> (the captain typed
-# /stow) or a main-chain assistant tool_use of Skill with input.skill "stow"
-# (the model invoked the skill). A stow has FINISHED once a turn end follows
-# it: the Stop hook then records a "stowed" marker for the cycle.
+# A stow invocation is a main-chain user entry whose string content carries
+# <command-name>/stow</command-name> (the captain typed /stow) or a main-chain
+# assistant tool_use of Skill with input.skill "stow" (the model invoked the
+# skill). For the automatic guard a stow counts only when it ran at or after
+# the context reached the stow threshold; an earlier stow in the cycle does not
+# license compaction. A counting stow has FINISHED once a turn end follows it:
+# the Stop hook then records a "stowed" marker for the cycle.
 #
 # Stow threshold: config/claude-stow-threshold holds one positive integer
 # token count, or "off" to disable both modes; absent or malformed means the
@@ -55,7 +57,7 @@
 #   - trigger "manual": when no stow ran in the current cycle, block once per
 #     cycle with an instruction to stow first; a second /compact in the same
 #     cycle compacts anyway.
-#   - trigger "auto": allow once the cycle's stow has finished. Otherwise
+#   - trigger "auto": allow once the cycle's counting stow has finished. Otherwise
 #     block while 200000 < context < ceiling, where the ceiling is the stow
 #     threshold plus 100000 tokens, capped at 950000. 200000 is the smallest
 #     Claude context window, so a prompt past it proves the model has the
@@ -184,6 +186,43 @@ slice_has_stow() {  # <after-line> <through-line|0>
   [ "$hit" = stow ]
 }
 
+# True when a stow invocation in the given slice ran at or after the context
+# reached $3. The context at a stow is the newest non-zero main-chain usage
+# before it, or the stow entry's own usage when it is a Skill tool_use.
+slice_has_qualified_stow() {  # <after-line> <through-line|0> <threshold>
+  local hit
+  hit=$(cycle_slice "$1" "$2" | jq -R -n -r --argjson threshold "$3" '
+    reduce inputs as $line (
+      {tokens: 0, hit: false};
+      if .hit then .
+      else
+        ($line | try fromjson catch null) as $e
+        | if ($e | type) != "object" then .
+          else
+            (if ($e.type == "assistant" and ($e.isSidechain | not)
+                 and (($e.message.usage? // null) | type) == "object")
+               then (($e.message.usage.input_tokens // 0)
+                     + ($e.message.usage.cache_creation_input_tokens // 0)
+                     + ($e.message.usage.cache_read_input_tokens // 0)) as $tokens
+                 | if $tokens > 0 then .tokens = $tokens else . end
+             else . end)
+            | if (($e.type == "user" and (($e.message.content? // null) | type) == "string"
+                    and ($e.message.content | contains("<command-name>/stow</command-name>")))
+                   or ($e.type == "assistant"
+                     and (($e.message.content? // null) | type) == "array"
+                     and any($e.message.content[];
+                       type == "object" and .type == "tool_use" and .name == "Skill"
+                       and ((.input.skill? // "") == "stow"))))
+                  and .tokens >= $threshold
+              then .hit = true
+              else . end
+          end
+      end
+    ) | if .hit then "stow" else empty end
+  ' 2>/dev/null)
+  [ "$hit" = stow ]
+}
+
 # Context tokens of the newest main-chain assistant usage after line $1.
 cycle_context_tokens() {  # <after-line>
   local lines tokens
@@ -289,7 +328,7 @@ if [ "$CUR" -gt 0 ] && ! marker_present audited "$CYCLE_KEY"; then
   fi
 fi
 
-if slice_has_stow "$CUR" 0; then
+if slice_has_qualified_stow "$CUR" 0 "$THRESHOLD"; then
   # The first turn end after a stow finishes it. When Claude Code's own
   # compaction point is already passed, hold this turn end once more so the
   # next request, which Claude Code compacts before, happens now.
