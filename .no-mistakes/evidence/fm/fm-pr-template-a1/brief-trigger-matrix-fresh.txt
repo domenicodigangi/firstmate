@@ -1,0 +1,12 @@
+### fresh ship brief: mode=no-mistakes forge=none
+This project ships through no-mistakes: its pr step writes the pull request's title and description itself, filling the repository's PR template, so you never write one.
+
+### fresh ship brief: mode=direct-PR forge=none
+Load `/home/ddg/.no-mistakes/worktrees/67bf63ea0b24/01M3M2PW68215KVWFM1GYK49JK/.agents/skills/pr-description/SKILL.md` before writing or rewriting a pull-request title or description.
+
+### fresh ship brief: mode=local-only forge=none
+Load `/home/ddg/.no-mistakes/worktrees/67bf63ea0b24/01M3M2PW68215KVWFM1GYK49JK/.agents/skills/pr-description/SKILL.md` before writing or rewriting a pull-request title or description.
+
+### fresh ship brief: mode=no-mistakes forge=gerrit
+Load `/home/ddg/.no-mistakes/worktrees/67bf63ea0b24/01M3M2PW68215KVWFM1GYK49JK/.agents/skills/pr-description/SKILL.md` before writing or rewriting a pull-request title or description.
+

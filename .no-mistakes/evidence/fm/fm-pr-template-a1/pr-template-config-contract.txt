@@ -1,0 +1,7 @@
+config: .no-mistakes.yaml parses; pr.template = '.github/pull_request_template.md'
+template: regular file, bytes = 550
+template: valid UTF-8 Markdown, no NUL bytes
+top-level # headings (structurally preserved by pipeline): ['What', 'Why', 'How']
+optional ## headings: ['Notes', 'Next']
+section names/order (level-insensitive): ['What', 'Why', 'How', 'Notes', 'Next']
+OK: template satisfies the pr-description section contract and the documented pr.template input rules

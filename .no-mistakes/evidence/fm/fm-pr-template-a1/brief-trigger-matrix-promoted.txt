@@ -1,0 +1,9 @@
+### promoted scout ship instructions: mode=no-mistakes
+This project ships through no-mistakes: its pr step writes the pull request's title and description itself, filling the repository's PR template, so you never write one.
+
+### promoted scout ship instructions: mode=direct-PR
+Load `/home/ddg/.no-mistakes/worktrees/67bf63ea0b24/01M3M2PW68215KVWFM1GYK49JK/.agents/skills/pr-description/SKILL.md` before writing or rewriting a pull-request title or description.
+
+### promoted scout ship instructions: mode=local-only
+Load `/home/ddg/.no-mistakes/worktrees/67bf63ea0b24/01M3M2PW68215KVWFM1GYK49JK/.agents/skills/pr-description/SKILL.md` before writing or rewriting a pull-request title or description.
+
