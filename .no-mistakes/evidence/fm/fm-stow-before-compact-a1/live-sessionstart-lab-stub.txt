@@ -1,0 +1,6 @@
+=== Live: sessionstart live-e2e lab stub keeps the stow guard a clean no-op ===
+Lab built with the current make_lab() (all six tracked hook scripts stubbed), tracked .claude/settings.json copied,
+config/claude-stow-threshold=5000 so the Stop guard entry runs on the first turn end.
+
+Real Claude Code 2.1.283 stop_hook_summary from the transcript:
+{"hookCount":3,"hookErrors":[],"commands":[{"command":"[ -z \"${GROK_AGENT:-}${GROK_HOOK_EVENT:-}\" ] || exit 0; exec \"$CLAUDE_PROJECT_DIR\"/bin/fm-turnend-guard.sh --claude","durationMs":7},{"command":"[ -z \"${GROK_AGENT:-}${GROK_HOOK_EVENT:-}\" ] || exit 0; exec \"$CLAUDE_PROJECT_DIR\"/bin/fm-claude-stow-guard.sh --stop","durationMs":8},{"command":"[ -z \"${GROK_AGENT:-}${GROK_HOOK_EVENT:-}\" ] || exit 0; exec \"$CLAUDE_PROJECT_DIR\"/bin/fm-claude-stop-autoarm.sh","durationMs":7}]}

@@ -1,0 +1,12 @@
+=== Stow-then-compact as one sequence (real guard binary, hook contract) ===
+CLAUDE_CODE_AUTO_COMPACT_WINDOW=300000 (compaction point 267000).
+transcript: usage 300000 -> turn end -> Skill stow -> usage 331000
+1. turn end at 300000 (nudge to stow)                      rc=2
+  Context is at 300000 tokens, past the 300000-token stow threshold, and compaction follows the stow. Invoke the stow skill now (/stow) to capture this session's durable knowledge and open work, then end the turn. A lock-refused read-only session skips the stow and says so.
+2. PreCompact auto while the stow is still running         rc=2
+  Automatic compaction deferred: context is at 331000 tokens and no /stow has finished since the previous compaction. The stow runs at the turn end past 300000 tokens and compaction follows right after it; compaction proceeds without a stow at 400000 tokens.
+3. turn end that finishes the stow (post-stow hold)        rc=2
+  The stow is done. Context is at 331000 tokens, past the 267000-token automatic compaction point, so Claude Code compacts before your next reply. Reply with one short line saying the stow is done and compaction follows, then end the turn.
+4. PreCompact auto after the stow finished (compaction allowed) rc=0
+  
+markers: nudged s1 start;stowed s1 start;compact-kick s1 start;

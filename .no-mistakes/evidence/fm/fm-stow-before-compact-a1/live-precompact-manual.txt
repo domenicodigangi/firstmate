@@ -1,0 +1,11 @@
+=== LIVE manual /compact without a stow, then retry ===
+Claude Code 2.1.283, haiku, tracked .claude/settings.json verbatim, guard registered
+
+--- First /compact (session a4ac1231) ---
+Compaction blocked by PreCompact hook: [[ -z "${GROK_AGENT:-}${GROK_HOOK_EVENT:-}" ] || exit 0; exec "$CLAUDE_PROJECT_DIR"/bin/fm-claude-stow-guard.sh --precompact]: No /stow has run since the previous compaction, so this session's uncaptured knowledge would be lost to the summary. Run /stow first, then /compact. Run /compact again to compact without a stow.
+
+--- Second /compact ---
+
+
+--- compact_boundary written to transcript ---
+{"trigger":"manual","preTokens":21888}

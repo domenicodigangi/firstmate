@@ -1,0 +1,9 @@
+=== LIVE: real Claude Code manual /compact is held back until a stow ===
+Disposable primary-shaped dir: /tmp/fm-stow-manual.JWK6rX (threshold default 300000; context stayed tiny).
+Session 694d7ff9-af9c-477c-adc5-1fc684200a13.
+
+--- first /compact (no /stow since the previous compaction) ---
+Compaction blocked by PreCompact hook: [exec "$CLAUDE_PROJECT_DIR"/bin/fm-claude-stow-guard.sh --precompact]: No /stow has run since the previous compaction, so this session's uncaptured knowledge would be lost to the summary. Run /stow first, then /compact. Run /compact again to compact without a stow.
+
+--- second /compact (allowed) wrote a compact_boundary ---
+{"trigger":"manual","preTokens":21805,"postTokens":2590}

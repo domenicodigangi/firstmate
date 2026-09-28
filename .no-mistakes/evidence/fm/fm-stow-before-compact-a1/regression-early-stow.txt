@@ -1,0 +1,14 @@
+=== Regression: an early (pre-threshold) stow must NOT satisfy the guard ===
+Transcript: main-chain usage 150000 -> typed /stow -> usage 267000 -> usage 300000
+Run: bin/fm-claude-stow-guard.sh --stop (threshold 300000)
+
+PRE-FIX (9ccc8fda, before qualified-stow requirement):
+  exit=0 (allow)   markers: stowed s1 start   <-- BUG: early stow wrongly licensed compaction
+
+POST-FIX (a913d1be / HEAD):
+  exit=2 (block)   message:
+  Context is at 300000 tokens, past the 300000-token stow threshold, and compaction follows the stow. Invoke the stow skill now...
+  markers: nudged s1 start
+
+Focused test tests/fm-claude-stow-guard.test.sh::test_early_stow_does_not_satisfy_guard drives the full sequence
+(defer at 267k, nudge at 300k, defer before the fresh stow finishes, post-stow hold, allow after).

@@ -1,0 +1,5 @@
+=== Config threshold behavior (real guard binary, hook contract) ===
+  off, stop at 400000                            rc=0  
+  off, manual compact                            rc=0  
+  integer 150000, stop at 400000                 rc=2  Context is at 400000 tokens, past the 150000-token stow threshold, and compaction follows 
+  malformed falls back to 300000 default         rc=2  Context is at 400000 tokens, past the 300000-token stow threshold, and compaction follows 

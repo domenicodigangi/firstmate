@@ -1,0 +1,17 @@
+=== LIVE: real Claude Code 2.1.283 (haiku) registers and runs the stow guard ===
+Disposable primary-shaped dir: /tmp/fm-stow-live.6ERm2z
+config/claude-stow-threshold=5000 so the tracked Stop hook fires on the first turn end.
+Project .claude/settings.json registers only bin/fm-claude-stow-guard.sh --stop/--precompact.
+
+--- Stop hook feedback delivered to the model (from the real Claude transcript) ---
+Stop hook feedback:
+[exec "$CLAUDE_PROJECT_DIR"/bin/fm-claude-stow-guard.sh --stop]: Context is at 21700 tokens, past the 5000-token stow threshold, and compaction follows the stow. Invoke the stow skill now (/stow) to capture this session's durable knowledge and open work, then end the turn. A lock-refused read-only session skips the stow and says so.
+
+
+--- model action + CLI result ---
+TOOL Skill input={"skill":"stow"}
+{"num_turns":4,"is_error":false,"result":"stow complete"}
+
+--- guard markers written in the live session ---
+nudged c9d74bbd-4d4b-48f2-9e43-dc87f6d23c95 start
+stowed c9d74bbd-4d4b-48f2-9e43-dc87f6d23c95 start

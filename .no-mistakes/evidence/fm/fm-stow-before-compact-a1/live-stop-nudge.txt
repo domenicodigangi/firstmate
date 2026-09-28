@@ -1,0 +1,9 @@
+=== LIVE Stop nudge and stow under real Claude Code (haiku) ===
+Guard nudge delivered to the model:
+Stop hook feedback:
+[[ -z "${GROK_AGENT:-}${GROK_HOOK_EVENT:-}" ] || exit 0; exec "$CLAUDE_PROJECT_DIR"/bin/fm-claude-stow-guard.sh --stop]: Context is at 21751 tokens, past the 5000-token stow threshold, and compaction follows the stow. Invoke the stow skill now (/stow) to capture this session's durable knowledge and open work, then end the turn. A lock-refused read-only session skips the stow and says so.
+
+
+Model invoked:
+TOOL Skill skill=stow
+Markers: precompact-manual a4ac1231-066c-4620-90a1-881c84b88f75 start;

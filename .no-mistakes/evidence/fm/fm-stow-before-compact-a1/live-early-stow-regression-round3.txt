@@ -1,0 +1,13 @@
+=== Regression: an early (pre-threshold) stow must NOT satisfy the guard ===
+Real product guard binary through its hook contract.
+Transcript: usage 150000 -> typed /stow -> usage 267000 -> usage 300000.
+
+POST-FIX (HEAD b00e5d4c):
+  precompact auto @267k: rc=2 | Automatic compaction deferred: context is at 300000 tokens and no /stow has finished since the previous compaction. The stow runs at the turn end past 300000 tokens and compaction follows right after it; compaction proceeds without a stow at 400000 tokens.
+  stop @300k:           rc=2 | Context is at 300000 tokens, past the 300000-token stow threshold, and compaction follows the stow. Invoke the stow skill now (/stow) to capture this session's durable knowledge and open work, then end the turn. A lock-refused read-only session skips the stow and says so.
+  -> the early stow did not license; the nudge still fires at the threshold.
+
+PRE-FIX (9ccc8fda, before the at/after-threshold requirement):
+  stop @300k:           rc=0  stderr=
+  markers: stowed s1 start;
+  -> pre-fix wrongly allowed (exit 0) with the early stow; post-fix blocks.

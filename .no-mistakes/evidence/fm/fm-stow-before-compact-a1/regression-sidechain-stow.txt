@@ -1,0 +1,13 @@
+=== Regression: sidechain Skill stow at/after threshold must NOT license compaction ===
+Transcript: main-chain usage 300000 -> sidechain Skill stow -> main-chain usage 310000
+Run: bin/fm-claude-stow-guard.sh --stop (threshold 300000)
+
+PRE-FIX (f6f7663f, before main-chain filter on stow detection):
+  exit=0 (allow)   markers: stowed s1 start   <-- BUG: sidechain stow wrongly counted
+
+POST-FIX (a913d1be / HEAD):
+  exit=2 (block)   message:
+  Context is at 310000 tokens, past the 300000-token stow threshold, and compaction follows the stow. Invoke the stow skill now...
+  markers: nudged s1 start
+
+Reproduced by running the same transcript through both revisions of the script.

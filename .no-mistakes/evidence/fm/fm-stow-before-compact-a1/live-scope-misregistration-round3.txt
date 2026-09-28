@@ -1,0 +1,12 @@
+=== Scope, foreign hosts, and misregistration (real guard binary) ===
+Linked task worktree / Cursor payload / Pi transcript / empty payload / missing transcript all stand down (rc=0).
+Missing or unknown mode exits 1 (never the blocking 2).
+Driven in /tmp/fm-stow-probe.dHSVXi; results:
+  Cursor payload      rc=0
+  linked task worktree rc=0
+  Pi transcript        rc=0
+  empty payload        rc=0
+  missing transcript   rc=0
+  mode 'none'          rc=1  usage: fm-claude-stow-guard.sh --stop|--precompact
+  mode '--pre-compact' rc=1  usage: fm-claude-stow-guard.sh --stop|--precompact
+  mode 'stop'          rc=1  usage: fm-claude-stow-guard.sh --stop|--precompact
