@@ -347,7 +347,20 @@ EOF
 # there, so the trigger names the absolute firstmate code-root path instead of a
 # bare name. bin/fm-brief.sh renders it into a fresh ship brief and
 # bin/fm-promote.sh into a promoted scout's ship instructions.
-fm_pr_description_trigger_block() {
+# On mode=no-mistakes forge=none, the worker never opens or describes the PR:
+# the pipeline's own pr step writes the description, filling the repository's
+# `pr.template` (see .no-mistakes.yaml) when one is configured, so the skill's
+# trigger does not apply there. Every other mode/forge combination - direct-PR,
+# local-only, and any no-mistakes:gerrit change description - still has the
+# worker write that narrative itself, so the trigger still fires.
+fm_pr_description_trigger_block() {  # <mode> [<forge>]
+  local mode=$1 forge=${2:-none}
+  if [ "$mode" = no-mistakes ] && [ "$forge" = none ]; then
+    cat <<EOF
+This project ships through no-mistakes: its pr step writes the pull request's title and description itself, filling the repository's PR template, so you never write one.
+EOF
+    return 0
+  fi
   cat <<EOF
 Load \`$FM_ROOT/.agents/skills/pr-description/SKILL.md\` before writing or rewriting a pull-request title or description.
 EOF
