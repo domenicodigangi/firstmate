@@ -38,13 +38,24 @@
 #     copied instead of linked, so a CI step or repo script that writes git or
 #     gh config (for example `git config --global`) cannot reach the real
 #     files. No key directory is ever linked or copied.
+#   - UV_CACHE_DIR and npm_config_cache point at shared package caches,
+#     ${XDG_CACHE_HOME:-$HOME/.cache}/fm-nm-shared/{uv,npm}, resolved from the
+#     real environment before HOME is replaced. Runs then reuse downloaded
+#     packages, and uv can hardlink from the cache into worktrees on the same
+#     filesystem, instead of each run refilling an empty cache inside its
+#     throwaway HOME. Only these package caches are shared; the directory is
+#     private (mode 700) and holds no credentials.
 #   - The real agent is the first <agent> on PATH outside this script's own
-#     directories; it replaces this process (exec), so the agent keeps the
-#     pid no-mistakes started and a timeout kill reaches it directly.
-#   - Earlier launch HOMEs whose recorded agent pid is gone are removed first;
-#     removal never follows the links inside them.
+#     directories. It runs as a child that keeps the launcher's stdin; TERM,
+#     INT, and HUP are forwarded to it, and the throwaway HOME is removed when
+#     it exits, on success, failure, or those signals. rm -rf never follows
+#     the links inside it.
+#   - Earlier launch HOMEs whose recorded agent pid is gone are still removed
+#     first, so a HOME whose agent has exited is reclaimed even when the
+#     launcher was killed by SIGKILL before it could run cleanup.
 #
-# Exit: the agent's own status; 127 when the agent name is not pi, claude, or
+# Exit: the agent's own status (128 plus the signal number when the launcher
+# itself was signalled); 127 when the agent name is not pi, claude, or
 # codex, or no real agent binary is found (a refusal names the agent).
 set -u
 
@@ -136,10 +147,38 @@ for rel in "${COPIES[@]}"; do
   cp -R -L -- "$REAL_HOME/$rel" "$SANDBOX/$rel" || refuse "could not copy $rel into $SANDBOX"
 done
 
+# Shared package caches, resolved against the real environment. Package
+# caches only: nothing here holds credentials.
+SHARED_CACHE=${XDG_CACHE_HOME:-$REAL_HOME/.cache}/fm-nm-shared
+mkdir -p -- "$SHARED_CACHE/uv" "$SHARED_CACHE/npm" || refuse "could not create the shared package cache $SHARED_CACHE"
+chmod 700 "$SHARED_CACHE" "$SHARED_CACHE/uv" "$SHARED_CACHE/npm" 2>/dev/null || true
+
 for name in $(compgen -e); do
   case "$name" in SOPS_AGE_*) unset "$name" ;; esac
 done
 unset XDG_CONFIG_HOME XDG_DATA_HOME XDG_STATE_HOME XDG_CACHE_HOME
 
 export HOME="$SANDBOX"
-exec "$REAL_AGENT" "$@"
+export UV_CACHE_DIR="$SHARED_CACHE/uv"
+export npm_config_cache="$SHARED_CACHE/npm"
+
+agent_pid=
+cleanup() { rm -rf -- "$SANDBOX"; }
+# shellcheck disable=SC2329 # Invoked by the signal traps below.
+forward() {  # <signal>
+  [ -z "$agent_pid" ] || kill "-$1" "$agent_pid" 2>/dev/null
+}
+trap 'forward TERM; wait "$agent_pid" 2>/dev/null; cleanup; exit 143' TERM
+trap 'forward INT; wait "$agent_pid" 2>/dev/null; cleanup; exit 130' INT
+trap 'forward HUP; wait "$agent_pid" 2>/dev/null; cleanup; exit 129' HUP
+
+# Async with an explicit stdin duplicate: a bare background job would get
+# /dev/null, and a foreground wait would defer the signal traps.
+"$REAL_AGENT" "$@" <&0 &
+agent_pid=$!
+printf '%s\n' "$agent_pid" > "$SANDBOX/.fm-nm-agent-pid" || true
+wait "$agent_pid"
+status=$?
+trap - TERM INT HUP
+cleanup
+exit "$status"
