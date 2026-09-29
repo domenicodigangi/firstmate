@@ -1,0 +1,14 @@
+# Live: firstmate .env is tightened to owner-only (FM-1: '.env chmod 600 or sealed')
+# Host: Linux 5.15.0-186-generic  Date: 2026-09-29T10:27:51Z
+# Exercised bin/fm-env-lib.sh:fm_env_file_secure (owner of the contract, called by bin/fm-bootstrap.sh)
+world-readable .env before: mode 644
+BOOTSTRAP_INFO: tightened /tmp/fm-test-scratch.m1najl/env-evid.5KIW/.env from mode 644 to owner-only because it holds credentials
+world-readable .env after : mode 600  content=FM_EXAMPLE=value
+group-readable .env before: mode 640
+BOOTSTRAP_INFO: tightened /tmp/fm-test-scratch.m1najl/env-evid.5KIW/group.env from mode 640 to owner-only because it holds credentials
+group-readable .env after : mode 600  content=FM_EXAMPLE=value
+owner-only .env is left untouched (silent):
+  output='' mode=600
+
+# Bootstrap integration: the repo behavior test 'bootstrap tightens a group- or world-accessible .env to mode 600'
+# drives the real bin/fm-bootstrap.sh in a fixture home and passed in this run (see tested list).

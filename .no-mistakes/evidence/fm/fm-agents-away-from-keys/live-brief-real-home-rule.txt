@@ -1,0 +1,12 @@
+# Live: every crewmate brief carries the real-HOME key-write rule (FM-1 crew brief rule)
+# Host: Linux 5.15.0-186-generic  Date: 2026-09-29T10:27:51Z
+# Exercised the real bin/fm-brief.sh; read the generated brief.md public output.
+--- no-mistakes (/tmp/fm-test-scratch.m1najl/brief-evid/data/ev-no-mistakes/brief.md) ---
+76:8. Never run CI `run:` blocks or repo scripts that write under `~/.config/sops`, `~/.secrets`, or `~/.ssh` with your real `HOME`; point `HOME` at a throwaway `mktemp -d` directory for them instead.
+--- direct-PR (/tmp/fm-test-scratch.m1najl/brief-evid/data/ev-direct-PR/brief.md) ---
+73:8. Never run CI `run:` blocks or repo scripts that write under `~/.config/sops`, `~/.secrets`, or `~/.ssh` with your real `HOME`; point `HOME` at a throwaway `mktemp -d` directory for them instead.
+--- local-only (/tmp/fm-test-scratch.m1najl/brief-evid/data/ev-local-only/brief.md) ---
+73:8. Never run CI `run:` blocks or repo scripts that write under `~/.config/sops`, `~/.secrets`, or `~/.ssh` with your real `HOME`; point `HOME` at a throwaway `mktemp -d` directory for them instead.
+--- scout (/tmp/fm-test-scratch.m1najl/brief-evid/data/ev-scout/brief.md) ---
+68:8. Never run CI `run:` blocks or repo scripts that write under `~/.config/sops`, `~/.secrets`, or `~/.ssh` with your real `HOME`; point `HOME` at a throwaway `mktemp -d` directory for them instead.
+ship rule == scout rule: YES

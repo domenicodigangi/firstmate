@@ -1,0 +1,6 @@
+# Live: launcher refuses unsupported agents and never relaunches through itself
+# Host: Linux 5.15.0-186-generic  Date: 2026-09-29T10:27:53Z
+unknown agent 'grok': exit=127
+  fm-nm-agent-home: unsupported agent 'grok' (supported: pi, claude, codex); invoke through bin/nm-agent-home/<agent>
+pi absent from PATH outside the launcher: exit=127
+  fm-nm-agent-home: no real pi found on PATH outside /home/ddg/.no-mistakes/worktrees/67bf63ea0b24/01M3P8NRRXBAQTAWFX4EGQP0B2/bin/nm-agent-home

@@ -1,0 +1,32 @@
+# Live: real no-mistakes pipeline agent runs with a throwaway HOME (FM-1)
+# Host: Linux 5.15.0-186-generic  Date: 2026-09-29T10:27:23Z
+# Launcher: bin/fm-nm-agent-home.sh @ fd5e87b4
+
+## 1. Real 'pi' exec environment (strace -f -e trace=execve -v), hostile SOPS/XDG env set
+Hostile input env: SOPS_AGE_KEY=SUPERSECRET-KEY SOPS_AGE_KEY_FILE=... SOPS_AGE_KEY_CMD=cat XDG_CONFIG_HOME=... XDG_CACHE_HOME=... XDG_DATA_HOME=... XDG_STATE_HOME=... XDG_RUNTIME_DIR=/run/user/fixture
+Final real-pi execve environment (subset):
+"HOME=/tmp/fm-nm-agent-home.V2hV5ubh"
+"XDG_RUNTIME_DIR=/run/user/fixture"
+SOPS_AGE_* entries in the final exec: 0
+
+## 2. Symlinked git/gh sources are dereferenced to real copies, key dirs stay out
+sandbox: /tmp/fm-test-scratch.m1najl/iso-tmp/fm-nm-agent-home.yqzKIUZA
+.pi -> symlink -> /tmp/fm-test-scratch.m1najl/iso-real/.pi
+.gitconfig -> regular file (copy)
+.config/git -> regular directory (copy)
+.config/gh -> regular directory (copy)
+.config/sops -> ABSENT (not exposed)
+.secrets -> ABSENT (not exposed)
+.ssh -> ABSENT (not exposed)
+
+## 3. A CI step/repo script writing through the throwaway HOME
+write step done
+REAL git/gh config, sops age key, ~/.secrets, and ~/.ssh unchanged: YES
+sandbox .gitconfig now: clobbered
+sandbox .config/git/config now: clobbered
+sandbox .config/gh/hosts.yml now: clobbered
+sandbox .config/sops/age/keys.txt now: clobbered
+
+## 4. Launcher works where readlink is non-GNU (macOS/BSD coreutils simulation)
+shim: rejects 'readlink -f' exactly as stock macOS/BSD does, delegates everything else to /usr/bin/readlink
+launcher exit with -f-refusing readlink shim: 0 (0 means the '-f' bug is gone)

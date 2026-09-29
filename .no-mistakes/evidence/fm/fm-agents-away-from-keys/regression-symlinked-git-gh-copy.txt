@@ -1,0 +1,22 @@
+# Regression: symlinked real ~/.gitconfig / ~/.config/gh were copied as symlinks before commit fd5e87b4
+# Host: Linux 5.15.0-186-generic  Date: 2026-09-29T10:27:44Z
+
+### before-fd5e87b4
+  sandbox .gitconfig -> SYMLINK -> /tmp/fm-test-scratch.m1najl/reg-before-fd5e87b4-dot/gitconfig
+  sandbox .config/git -> SYMLINK -> /tmp/fm-test-scratch.m1najl/reg-before-fd5e87b4-dot/git
+  sandbox .config/gh -> SYMLINK -> /tmp/fm-test-scratch.m1najl/reg-before-fd5e87b4-dot/gh
+  real resolved targets after a write through the throwaway HOME:
+    /tmp/fm-test-scratch.m1najl/reg-before-fd5e87b4-dot/gitconfig  => CLOBBERED
+    /tmp/fm-test-scratch.m1najl/reg-before-fd5e87b4-dot/git/config => CLOBBERED
+    /tmp/fm-test-scratch.m1najl/reg-before-fd5e87b4-dot/gh/hosts.yml => CLOBBERED
+
+### after-fd5e87b4
+  sandbox .gitconfig -> real copy
+  sandbox .config/git -> real copy
+  sandbox .config/gh -> real copy
+  real resolved targets after a write through the throwaway HOME:
+    /tmp/fm-test-scratch.m1najl/reg-after-fd5e87b4-dot/gitconfig  => ORIGINAL-gitconfig
+    /tmp/fm-test-scratch.m1najl/reg-after-fd5e87b4-dot/git/config => [user]
+	name = real
+    /tmp/fm-test-scratch.m1najl/reg-after-fd5e87b4-dot/gh/hosts.yml => ORIGINAL-gh-token
+
