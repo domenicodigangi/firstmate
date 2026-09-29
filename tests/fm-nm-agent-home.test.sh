@@ -170,8 +170,10 @@ test_shared_package_caches() {
   assert_equals "$REAL/.cache/fm-nm-shared/npm" "$(field npm_cache)" "default shared npm cache is not under the real HOME's .cache"
   case "$(field uv_cache)" in "$home"/*) fail "shared cache lives inside the throwaway HOME" ;; esac
 
+  # shellcheck disable=SC2016 # The steps run later, inside the agent.
   # Two runs share cached files: a file placed by the first is hardlinkable in the second.
   FAKE_STEP='echo pkg > "$UV_CACHE_DIR/pkg"' run_agent pi < /dev/null || fail "first cache run failed"
+  # shellcheck disable=SC2016 # The step runs later, inside the agent.
   FAKE_STEP='test -f "$UV_CACHE_DIR/pkg" && ln "$UV_CACHE_DIR/pkg" "$UV_CACHE_DIR/pkg.link"' run_agent pi < /dev/null \
     || fail "second run did not see the first run's cached file"
   assert_equals 2 "$(stat -c %h "$REAL/.cache/fm-nm-shared/uv/pkg" 2>/dev/null || stat -f %l "$REAL/.cache/fm-nm-shared/uv/pkg")" "cached file was not hardlinked across runs"
