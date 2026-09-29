@@ -17,6 +17,8 @@ mkdir -p "$REAL/.pi/agent" "$REAL/.claude" "$REAL/.codex" "$REAL/.config/gh" \
 printf 'pi-auth\n' > "$REAL/.pi/agent/auth.json"
 printf 'claude-state\n' > "$REAL/.claude.json"
 printf '[user]\n\tname = t\n' > "$REAL/.gitconfig"
+printf '[init]\n\tdefaultBranch = main\n' > "$REAL/.config/git/config"
+printf 'gh-token\n' > "$REAL/.config/gh/hosts.yml"
 printf 'real-key\n' > "$REAL/.config/sops/age/keys.txt"
 
 # Fake agents: report the environment they were launched with, then run any
@@ -70,17 +72,32 @@ test_launches_agent_with_throwaway_home() {
   pass "fm-nm-agent-home.sh: agents run with a throwaway HOME, unchanged argv and stdin, and no SOPS age keys"
 }
 
-test_agent_config_is_linked_not_copied() {
+test_agent_config_is_linked_and_git_gh_copied() {
   local home
   run_agent pi < /dev/null || fail "pi launch failed"
   home=$(field home)
   [ -L "$home/.pi" ] || fail "pi config was not linked into the throwaway HOME"
   assert_equals "$REAL/.pi" "$(readlink "$home/.pi")" "pi config link does not reach the real config"
-  [ -L "$home/.gitconfig" ] || fail "git identity was not linked into the throwaway HOME"
-  [ -L "$home/.config/gh" ] || fail "gh auth was not linked into the throwaway HOME"
+  [ ! -L "$home/.gitconfig" ] || fail "git identity was symlinked, exposing the real file to writes"
+  [ ! -L "$home/.config/git" ] || fail "git config was symlinked, exposing the real config to writes"
+  [ ! -L "$home/.config/gh" ] || fail "gh auth was symlinked, exposing the real config to writes"
+  assert_equals "$(cat "$REAL/.gitconfig")" "$(cat "$home/.gitconfig")" "git identity was not copied"
+  assert_equals "$(cat "$REAL/.config/git/config")" "$(cat "$home/.config/git/config")" "git config was not copied"
+  assert_equals "$(cat "$REAL/.config/gh/hosts.yml")" "$(cat "$home/.config/gh/hosts.yml")" "gh auth was not copied"
   [ ! -e "$home/.claude" ] || fail "pi launch linked another agent's config"
   [ ! -e "$home/.config/sops" ] && [ ! -e "$home/.secrets" ] && [ ! -e "$home/.ssh" ] \
     || fail "key directories were exposed in the throwaway HOME"
+
+  local step
+  # shellcheck disable=SC2016 # The step runs later, inside the agent's HOME.
+  step='unset GIT_CONFIG_GLOBAL GIT_CONFIG_NOSYSTEM; git config --global user.name clobbered && echo clobbered > "$HOME/.config/git/config" && echo clobbered > "$HOME/.config/gh/hosts.yml"'
+  FAKE_STEP=$step run_agent pi < /dev/null || fail "pi launch with a git/gh write step failed"
+  home=$(field home)
+  grep -q 'clobbered' "$home/.gitconfig" || fail "the step did not write the throwaway HOME's git identity"
+  grep -q 'name = t' "$REAL/.gitconfig" || fail "a write through the throwaway HOME changed the real git identity"
+  assert_equals '[init]
+	defaultBranch = main' "$(cat "$REAL/.config/git/config")" "a write through the throwaway HOME changed the real git config"
+  assert_equals gh-token "$(cat "$REAL/.config/gh/hosts.yml")" "a write through the throwaway HOME changed the real gh auth"
 
   run_agent claude < /dev/null || fail "claude launch failed"
   home=$(field home)
@@ -88,7 +105,7 @@ test_agent_config_is_linked_not_copied() {
   run_agent codex < /dev/null || fail "codex launch failed"
   home=$(field home)
   [ -L "$home/.codex" ] || fail "codex config was not linked"
-  pass "fm-nm-agent-home.sh: only the agent's own config plus git and gh auth are linked in"
+  pass "fm-nm-agent-home.sh: agent config is linked, git and gh auth are copied and write-isolated"
 }
 
 test_ci_step_cannot_clobber_real_keys() {
@@ -149,7 +166,7 @@ test_prunes_dead_launch_homes_only() {
 }
 
 test_launches_agent_with_throwaway_home
-test_agent_config_is_linked_not_copied
+test_agent_config_is_linked_and_git_gh_copied
 test_ci_step_cannot_clobber_real_keys
 test_agent_replaces_the_launcher_process
 test_exit_status_propagates

@@ -614,7 +614,9 @@ Portable shard evidence and coverage rules are in [fm-test-portable-shards.md](f
 ## No-mistakes agent home (agent_path_override)
 
 No-mistakes pipeline agents inherit the daemon's environment, including the real `HOME`, so a CI step or repo script an agent runs locally can overwrite personal keys under `~/.config/sops`, `~/.secrets`, or `~/.ssh`.
-[`bin/fm-nm-agent-home.sh`](../bin/fm-nm-agent-home.sh) launches each pi, claude, or codex pipeline agent with a throwaway `mktemp -d` `HOME` and every `SOPS_AGE_*` variable unset, linking in only that agent's own config plus git and gh auth.
+[`bin/fm-nm-agent-home.sh`](../bin/fm-nm-agent-home.sh) launches each pi, claude, or codex pipeline agent with a throwaway `mktemp -d` `HOME` and every `SOPS_AGE_*` variable unset, linking in only that agent's own config and copying in git and gh auth.
+The agent's own config stays a symlink so OAuth token refreshes and session reuse keep working; the residual is that an agent can still write through to that real config.
+Git identity and gh auth are copied, so a CI step or repo script that writes git or gh config (for example `git config --global`) cannot reach the real files.
 No-mistakes offers no per-agent environment setting, so the only lever is its machine-global `agent_path_override`, pointed at the `bin/nm-agent-home/<agent>` entries of the firstmate checkout on its default branch:
 
 ```yaml

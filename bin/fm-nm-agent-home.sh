@@ -28,14 +28,16 @@
 #     SOPS_AGE_KEY_CMD, and the rest of that family), and the HOME-relative
 #     XDG_CONFIG_HOME, XDG_DATA_HOME, XDG_STATE_HOME, and XDG_CACHE_HOME are
 #     unset so tools fall back to the throwaway HOME. XDG_RUNTIME_DIR is kept.
-#   - Only what the agent needs to authenticate and resume sessions is linked
-#     in from the real HOME: the agent's own config (pi: .pi, claude: .claude
-#     and .claude.json, codex: .codex), git identity (.gitconfig,
-#     .config/git), and gh auth (.config/gh), each only when it exists.
-#     These are symlinks, not copies: a copied OAuth credential would fork the
+#   - The agent's own config (pi: .pi, claude: .claude and .claude.json,
+#     codex: .codex) is symlinked in from the real HOME, only when it exists.
+#     These stay links, not copies: a copied OAuth credential would fork the
 #     refresh token, so the first refresh in one copy could sign the other out,
-#     and a copied session store would break no-mistakes session reuse.
-#     No key directory is ever linked.
+#     and a copied session store would break no-mistakes session reuse. The
+#     residual is that these agents can still write through to the real config.
+#   - Git identity (.gitconfig, .config/git) and gh auth (.config/gh) are
+#     copied instead of linked, so a CI step or repo script that writes git or
+#     gh config (for example `git config --global`) cannot reach the real
+#     files. No key directory is ever linked or copied.
 #   - The real agent is the first <agent> on PATH outside this script's own
 #     directories; it replaces this process (exec), so the agent keeps the
 #     pid no-mistakes started and a timeout kill reaches it directly.
@@ -46,7 +48,28 @@
 # codex, or no real agent binary is found (a refusal names the agent).
 set -u
 
-SELF=$(readlink -f "${BASH_SOURCE[0]}")
+# Canonical absolute path for $1, or the input unchanged when it cannot be
+# resolved. readlink -f is GNU-only and realpath is not guaranteed on macOS,
+# so follow the symlink chain by hand.
+canonical_path() {  # <path>
+  local path=$1 dir base hops=0 target
+  [ -n "$path" ] || return 1
+  dir=$(CDPATH='' cd -- "$(dirname -- "$path")" 2>/dev/null && pwd -P) || { printf '%s\n' "$path"; return 0; }
+  base=$(basename -- "$path")
+  while [ -L "$dir/$base" ] && [ "$hops" -lt 40 ]; do
+    target=$(readlink -- "$dir/$base") || break
+    case "$target" in
+      /*) dir=$(CDPATH='' cd -- "$(dirname -- "$target")" 2>/dev/null && pwd -P) || break
+          base=$(basename -- "$target") ;;
+      *)  dir=$(CDPATH='' cd -- "$dir/$(dirname -- "$target")" 2>/dev/null && pwd -P) || break
+          base=$(basename -- "$target") ;;
+    esac
+    hops=$((hops + 1))
+  done
+  printf '%s\n' "$dir/$base"
+}
+
+SELF=$(canonical_path "${BASH_SOURCE[0]}")
 SELF_DIR=$(dirname "$SELF")
 INVOKED_DIR=$(cd "$(dirname "$0")" && pwd -P)
 AGENT=$(basename "$0")
@@ -62,7 +85,7 @@ case "$AGENT" in
   codex) LINKS=(.codex) ;;
   *) refuse "unsupported agent '$AGENT' (supported: pi, claude, codex); invoke through bin/nm-agent-home/<agent>" ;;
 esac
-LINKS+=(.gitconfig .config/git .config/gh)
+COPIES=(.gitconfig .config/git .config/gh)
 
 REAL_HOME=${HOME:-}
 [ -n "$REAL_HOME" ] && [ -d "$REAL_HOME" ] || refuse "HOME is unset or missing; cannot locate $AGENT's config"
@@ -81,7 +104,7 @@ for dir in "${path_dirs[@]}"; do
 done
 REAL_AGENT=$(PATH=$search_path command -v "$AGENT" 2>/dev/null) || REAL_AGENT=
 [ -n "$REAL_AGENT" ] || refuse "no real $AGENT found on PATH outside $INVOKED_DIR"
-[ "$(readlink -f "$REAL_AGENT")" != "$SELF" ] || refuse "$AGENT on PATH resolves back to this launcher"
+[ "$(canonical_path "$REAL_AGENT")" != "$SELF" ] || refuse "$AGENT on PATH resolves back to this launcher"
 
 ROOT_TMP=${TMPDIR:-/tmp}
 ROOT_TMP=${ROOT_TMP%/}
@@ -105,6 +128,12 @@ for rel in "${LINKS[@]}"; do
   [ -e "$REAL_HOME/$rel" ] || continue
   case "$rel" in */*) mkdir -p "$SANDBOX/${rel%/*}" || refuse "could not prepare $SANDBOX/${rel%/*}" ;; esac
   ln -s "$REAL_HOME/$rel" "$SANDBOX/$rel" || refuse "could not link $rel into $SANDBOX"
+done
+
+for rel in "${COPIES[@]}"; do
+  [ -e "$REAL_HOME/$rel" ] || continue
+  case "$rel" in */*) mkdir -p "$SANDBOX/${rel%/*}" || refuse "could not prepare $SANDBOX/${rel%/*}" ;; esac
+  cp -R -- "$REAL_HOME/$rel" "$SANDBOX/$rel" || refuse "could not copy $rel into $SANDBOX"
 done
 
 for name in $(compgen -e); do
