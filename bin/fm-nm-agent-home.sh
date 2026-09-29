@@ -133,7 +133,7 @@ done
 for rel in "${COPIES[@]}"; do
   [ -e "$REAL_HOME/$rel" ] || continue
   case "$rel" in */*) mkdir -p "$SANDBOX/${rel%/*}" || refuse "could not prepare $SANDBOX/${rel%/*}" ;; esac
-  cp -R -- "$REAL_HOME/$rel" "$SANDBOX/$rel" || refuse "could not copy $rel into $SANDBOX"
+  cp -R -L -- "$REAL_HOME/$rel" "$SANDBOX/$rel" || refuse "could not copy $rel into $SANDBOX"
 done
 
 for name in $(compgen -e); do

@@ -108,6 +108,39 @@ test_agent_config_is_linked_and_git_gh_copied() {
   pass "fm-nm-agent-home.sh: agent config is linked, git and gh auth are copied and write-isolated"
 }
 
+test_symlinked_git_gh_sources_are_copied_not_linked() {
+  local real dotfiles home step
+  real="$TMP_ROOT/linked-home"
+  dotfiles="$TMP_ROOT/dotfiles"
+  mkdir -p "$real/.config" "$real/.pi" "$dotfiles/git" "$dotfiles/gh"
+  printf '[user]\n\tname = sym\n' > "$dotfiles/gitconfig"
+  printf '[init]\n\tdefaultBranch = symlinked\n' > "$dotfiles/git/config"
+  printf 'gh-token-sym\n' > "$dotfiles/gh/hosts.yml"
+  ln -s "$dotfiles/gitconfig" "$real/.gitconfig"
+  ln -s "$dotfiles/git" "$real/.config/git"
+  ln -s "$dotfiles/gh" "$real/.config/gh"
+
+  HOME="$real" TMPDIR="$SANDBOX_TMP" PATH="$LINKS:$FAKE:$PATH" FAKE_OUT="$TMP_ROOT/out" \
+    "$LINKS/pi" < /dev/null || fail "pi launch failed"
+  home=$(field home)
+  [ ! -L "$home/.gitconfig" ] || fail "a symlinked git identity was copied as a link"
+  [ ! -L "$home/.config/git" ] || fail "a symlinked git config was copied as a link"
+  [ ! -L "$home/.config/gh" ] || fail "a symlinked gh auth was copied as a link"
+  assert_equals "$(cat "$dotfiles/gitconfig")" "$(cat "$home/.gitconfig")" "the symlinked git identity was not copied as a real file"
+  assert_equals "$(cat "$dotfiles/git/config")" "$(cat "$home/.config/git/config")" "the symlinked git config was not copied as a real file"
+  assert_equals "$(cat "$dotfiles/gh/hosts.yml")" "$(cat "$home/.config/gh/hosts.yml")" "the symlinked gh auth was not copied as a real file"
+
+  # shellcheck disable=SC2016 # The step runs later, inside the agent's HOME.
+  step='unset GIT_CONFIG_GLOBAL GIT_CONFIG_NOSYSTEM; git config --global user.name clobbered && echo clobbered > "$HOME/.config/git/config" && echo clobbered > "$HOME/.config/gh/hosts.yml"'
+  FAKE_STEP=$step HOME="$real" TMPDIR="$SANDBOX_TMP" PATH="$LINKS:$FAKE:$PATH" FAKE_OUT="$TMP_ROOT/out" \
+    "$LINKS/pi" < /dev/null || fail "pi launch with a git/gh write step failed"
+  grep -q 'name = sym' "$dotfiles/gitconfig" || fail "a write through the throwaway HOME changed the symlinked real git identity"
+  assert_equals '[init]
+	defaultBranch = symlinked' "$(cat "$dotfiles/git/config")" "a write through the throwaway HOME changed the symlinked real git config"
+  assert_equals gh-token-sym "$(cat "$dotfiles/gh/hosts.yml")" "a write through the throwaway HOME changed the symlinked real gh auth"
+  pass "fm-nm-agent-home.sh: symlinked git and gh config are dereferenced into real copies"
+}
+
 test_ci_step_cannot_clobber_real_keys() {
   local step
   # shellcheck disable=SC2016 # The step runs later, inside the agent's HOME.
@@ -167,6 +200,7 @@ test_prunes_dead_launch_homes_only() {
 
 test_launches_agent_with_throwaway_home
 test_agent_config_is_linked_and_git_gh_copied
+test_symlinked_git_gh_sources_are_copied_not_linked
 test_ci_step_cannot_clobber_real_keys
 test_agent_replaces_the_launcher_process
 test_exit_status_propagates
