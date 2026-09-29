@@ -164,6 +164,7 @@ export npm_config_cache="$SHARED_CACHE/npm"
 
 agent_pid=
 cleanup() { rm -rf -- "$SANDBOX"; }
+# shellcheck disable=SC2329 # Invoked by the signal traps below.
 forward() {  # <signal>
   [ -z "$agent_pid" ] || kill "-$1" "$agent_pid" 2>/dev/null
 }

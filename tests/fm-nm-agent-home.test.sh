@@ -195,7 +195,7 @@ test_throwaway_home_removed_on_exit() {
 }
 
 test_signal_is_forwarded_and_home_removed() {
-  local pid i home
+  local pid home
   rm -f "$TMP_ROOT/started"
   mkdir -p "$TMP_ROOT/loop-agents"
   cat > "$TMP_ROOT/loop-agents/codex" <<'EOF'
@@ -209,7 +209,7 @@ EOF
   HOME="$REAL" TMPDIR="$SANDBOX_TMP" PATH="$LINKS:$TMP_ROOT/loop-agents:$PATH" FAKE_OUT="$TMP_ROOT/out" FAKE_SNAP="$TMP_ROOT/snap" \
     FAKE_STARTED="$TMP_ROOT/started" "$LINKS/codex" < /dev/null &
   pid=$!
-  for i in $(seq 1 100); do [ -e "$TMP_ROOT/started" ] && break; sleep 0.1; done
+  for _ in $(seq 1 100); do [ -e "$TMP_ROOT/started" ] && break; sleep 0.1; done
   [ -e "$TMP_ROOT/started" ] || fail "fake agent did not start"
   kill -TERM "$pid"
   wait "$pid"
@@ -256,7 +256,7 @@ test_prunes_dead_launch_homes_only() {
 }
 
 test_launcher_sigkill_keeps_running_agent_home() {
-  local launcher agent_pid home i
+  local launcher agent_pid home
   rm -f "$TMP_ROOT/started"
   mkdir -p "$TMP_ROOT/kill-agents"
   cat > "$TMP_ROOT/kill-agents/codex" <<'EOF'
@@ -269,10 +269,10 @@ EOF
   HOME="$REAL" TMPDIR="$SANDBOX_TMP" PATH="$LINKS:$TMP_ROOT/kill-agents:$PATH" FAKE_OUT="$TMP_ROOT/out" FAKE_SNAP="$TMP_ROOT/snap" \
     FAKE_STARTED="$TMP_ROOT/started" "$LINKS/codex" < /dev/null &
   launcher=$!
-  for i in $(seq 1 100); do [ -e "$TMP_ROOT/started" ] && break; sleep 0.1; done
+  for _ in $(seq 1 100); do [ -e "$TMP_ROOT/started" ] && break; sleep 0.1; done
   [ -e "$TMP_ROOT/started" ] || fail "fake agent did not start"
   home=$(field home)
-  for i in $(seq 1 100); do
+  for _ in $(seq 1 100); do
     agent_pid=$(head -n1 "$home/.fm-nm-agent-pid" 2>/dev/null)
     [ -n "$agent_pid" ] && kill -0 "$agent_pid" 2>/dev/null && break
     sleep 0.1
