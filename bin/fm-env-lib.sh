@@ -29,3 +29,23 @@ fmx_env_get() {
   esac
   printf '%s' "$val"
 }
+
+# fm_env_file_secure <file>
+# A .env holds credentials, so it must be readable by its owner only (mode 600).
+# When FILE exists with any group or other permission bit, remove those bits
+# silently; FM_BOOTSTRAP_VERBOSE_FACTS=1 prints that as one BOOTSTRAP_INFO fact. A symlinked .env (for example one sealed under ~/.secrets/firstmate/)
+# tightens its target. Returns 1 with an ENV_FILE diagnostic when chmod fails.
+fm_env_file_secure() {
+  local file=$1 mode
+  [ -f "$file" ] || return 0
+  mode=$(stat -c %a "$file" 2>/dev/null || stat -f %Lp "$file" 2>/dev/null) || return 0
+  case "$mode" in *[1-7][0-7] | *[0-7][1-7]) ;; *) return 0 ;; esac
+  if chmod go-rwx "$file" 2>/dev/null; then
+    [ "${FM_BOOTSTRAP_VERBOSE_FACTS:-0}" != 1 ] \
+      || echo "BOOTSTRAP_INFO: tightened $file from mode $mode to owner-only because it holds credentials"
+    return 0
+  fi
+  echo "ENV_FILE: $file is mode $mode (readable beyond its owner) and could not be tightened; run chmod 600 $file"
+  return 1
+}
+

@@ -1324,6 +1324,40 @@ test_crewmate_scaffolds_forbid_pool_administration() {
   pass "fm-brief.sh: every crewmate scaffold forbids administering the shared worktree pool"
 }
 
+# A crewmate that runs CI steps or repo scripts with its real HOME can
+# overwrite personal key material, so every crewmate scaffold carries the same
+# real-HOME rule from one shared string.
+test_crewmate_scaffolds_forbid_real_home_key_writes() {
+  local home id brief mode ship_rule scout_rule
+  home="$TMP_ROOT/real-home-keys-home"
+  mkdir -p "$home/data"
+
+  for mode in no-mistakes direct-PR local-only; do
+    id="brief-keys-$mode"
+    FM_HOME="$home" "$ROOT/bin/fm-brief.sh" "$id" alpha --mode "$mode" >/dev/null 2>&1 \
+      || fail "fm-brief.sh --mode $mode exited non-zero"
+    brief="$home/data/$id/brief.md"
+    # shellcheck disable=SC2016 # Literal backticks must remain unexpanded.
+    assert_grep '8. Never run CI `run:` blocks or repo scripts' "$brief" \
+      "$mode ship brief did not carry the real-HOME key-write rule"
+    # shellcheck disable=SC2088 # The literal tilde paths are the brief text under test.
+    for dir in '~/.config/sops' '~/.secrets' '~/.ssh'; do
+      assert_grep "$dir" "$brief" "$mode ship brief real-HOME rule did not name $dir"
+    done
+  done
+
+  FM_HOME="$home" "$ROOT/bin/fm-brief.sh" brief-keys-scout alpha --scout >/dev/null 2>&1 \
+    || fail "fm-brief.sh --scout exited non-zero"
+  brief="$home/data/brief-keys-scout/brief.md"
+  ship_rule=$(grep '^8\. Never run CI' "$home/data/brief-keys-no-mistakes/brief.md")
+  scout_rule=$(grep '^8\. Never run CI' "$brief")
+  [ -n "$ship_rule" ] || fail "ship brief emitted no real-HOME rule to compare"
+  [ "$ship_rule" = "$scout_rule" ] \
+    || fail "ship and scout real-HOME rules have drifted apart"
+
+  pass "fm-brief.sh: every crewmate scaffold forbids key-writing scripts under the real HOME"
+}
+
 test_script_parses
 test_no_heredoc_in_command_substitution
 test_help_includes_entire_header
@@ -1358,3 +1392,4 @@ test_branch_prefix_is_refused_where_it_does_not_apply
 test_branch_prefix_value_is_validated
 test_branch_prefix_command_is_shell_safe
 test_crewmate_scaffolds_forbid_pool_administration
+test_crewmate_scaffolds_forbid_real_home_key_writes

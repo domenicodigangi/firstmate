@@ -1259,6 +1259,44 @@ test_fleet_sync_timeout_floor_preserves_small_fleets
 test_fleet_sync_timeout_explicit_override_wins
 test_fleet_sync_timeout_empty_override_uses_default
 test_fleet_sync_timeout_is_computed_before_launch
+# A home's .env holds credentials, so the locked bootstrap path tightens a
+# group- or world-accessible one to owner-only, reports that as a verbose-only
+# fact, and leaves a detect-only run untouched.
+test_env_file_is_tightened_to_owner_only() {
+  local case_dir fixture root home fakebin out mode
+  case_dir="$TMP_ROOT/env-file-mode"
+  fixture=$(make_routine_bootstrap_fixture "$case_dir")
+  root=${fixture%%|*}
+  fixture=${fixture#*|}
+  home=${fixture%%|*}
+  fakebin=${fixture#*|}
+  printf 'FM_EXAMPLE=value\n' > "$home/.env"
+  chmod 644 "$home/.env"
+  env_mode() { stat -c %a "$1" 2>/dev/null || stat -f %Lp "$1"; }
+
+  out=$(PATH="$fakebin:$BASE_PATH" FM_BACKEND=tmux FM_HOME="$home" FM_ROOT_OVERRIDE="$root" \
+    FM_FAKE_TREEHOUSE_LEASE_HELP=1 FM_BOOTSTRAP_DETECT_ONLY=1 "$ROOT/bin/fm-bootstrap.sh")
+  mode=$(env_mode "$home/.env")
+  assert_equals 644 "$mode" "detect-only bootstrap changed the .env mode"
+
+  out=$(PATH="$fakebin:$BASE_PATH" FM_BACKEND=tmux FM_HOME="$home" FM_ROOT_OVERRIDE="$root" \
+    FM_FAKE_TREEHOUSE_LEASE_HELP=1 FM_BOOTSTRAP_VERBOSE_FACTS=1 "$ROOT/bin/fm-bootstrap.sh")
+  mode=$(env_mode "$home/.env")
+  assert_equals 600 "$mode" "locked bootstrap left a world-readable .env"
+  assert_contains "$out" "BOOTSTRAP_INFO: tightened" "tightening the .env was not reported"
+  assert_equals "FM_EXAMPLE=value" "$(cat "$home/.env")" "tightening changed the .env contents"
+
+  out=$(PATH="$fakebin:$BASE_PATH" FM_BACKEND=tmux FM_HOME="$home" FM_ROOT_OVERRIDE="$root" \
+    FM_FAKE_TREEHOUSE_LEASE_HELP=1 "$ROOT/bin/fm-bootstrap.sh")
+  assert_not_contains "$out" "tightened" "an owner-only .env was reported as tightened again"
+  chmod 640 "$home/.env"
+  out=$(PATH="$fakebin:$BASE_PATH" FM_BACKEND=tmux FM_HOME="$home" FM_ROOT_OVERRIDE="$root" \
+    FM_FAKE_TREEHOUSE_LEASE_HELP=1 "$ROOT/bin/fm-bootstrap.sh")
+  assert_equals 600 "$(env_mode "$home/.env")" "locked bootstrap left a group-readable .env"
+  assert_not_contains "$out" "tightened" "tightening should be a silent routine fact by default"
+  pass "bootstrap tightens a group- or world-accessible .env to mode 600"
+}
+
 test_routine_bootstrap_confirmations_are_silent
 test_routine_bootstrap_contract_runs_under_system_bash
 test_network_phase_partitions_the_run
@@ -1267,3 +1305,4 @@ test_network_phases_record_per_step_elapsed_times
 test_tasks_axi_verdict_handoff_is_consumed_once
 test_crew_dispatch_active_rules_are_verbose_bootstrap_info
 test_crew_dispatch_validation
+test_env_file_is_tightened_to_owner_only
