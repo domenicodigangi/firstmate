@@ -9,7 +9,7 @@ Start with the directory layout, then use the setting reference for the behavior
 | --- | --- |
 | Firstmate's code, private files, or project location | [FM_HOME](#fm_home) and [operational home layout](#operational-home-layout-and-state) |
 | Task windows and worker tools | [Runtime backend](#runtime-backend-configbackend--fm_backend) and [harness support](#harness-support) |
-| Worker permissions, accounts, or environment | [Claude permission mode](#claude-permission-mode-configclaude-permission-mode), [worker account pin](#worker-account-pin-configclaude-account-configpi-account), and [worker launch environment](#worker-launch-environment-configlaunch-env-allowlist) |
+| Worker permissions, accounts, or environment | [Claude permission mode](#claude-permission-mode-configclaude-permission-mode), [worker account pin](#worker-account-pin-configclaude-account-configpi-account), [worker launch environment](#worker-launch-environment-configlaunch-env-allowlist), and [no-mistakes agent home](#no-mistakes-agent-home-agent_path_override) |
 | Backlog, preferences, and memory | [Backlog backend](#backlog-backend-taskstoml--configbacklog-backend), [captain preferences](#captain-preferences-datacaptainmd--datacaptain-sharedmd), [startup memory budget](#startup-memory-budget-configstartup-memory-budget), and [stow before compaction](#stow-before-compaction-configclaude-stow-threshold) |
 | Supervision and presentation | [Pi supervision branch](#pi-supervision-branch), [supervision host](#supervision-host-configsupervision-host), and [Calm preference](#calm-preference-configcalm) |
 | Persistent secondmates | [Secondmate routes](#secondmate-routes-datasecondmatesmd) |
@@ -93,6 +93,9 @@ Each effective `FM_HOME` contains private operational directories.
 - Parent-owned secondmate pending-reply records under `state/pending-replies/` (`bin/fm-pending-reply-lib.sh`).
 
 `config/` holds local gitignored operating choices, including explicit extension bindings under `config/extensions.d/`.
+
+The optional gitignored `.env` at the home root holds credentials, so it must be readable by its owner only: keep it at mode 600, or seal it under `~/.secrets/firstmate/` and link it into the home.
+The locked session-start bootstrap tightens a group- or world-accessible `.env` to owner-only, and `fm_env_file_secure` in [`bin/fm-env-lib.sh`](../bin/fm-env-lib.sh) owns that contract.
 
 `projects/` holds local project clones.
 Firstmate reads these clones, but changes them only through the narrow guarded and concrete captain-approved exceptions in `AGENTS.md`.
@@ -607,6 +610,26 @@ The [`firstmate-coding-guidelines` skill](../.agents/skills/firstmate-coding-gui
 See [CONTRIBUTING.md](../CONTRIBUTING.md) for the firstmate-specific local test policy and entry points.
 
 Portable shard evidence and coverage rules are in [fm-test-portable-shards.md](fm-test-portable-shards.md); [herdr-backend.md](herdr-backend.md#destructive-lab-safety) owns the real-Herdr lane's isolation boundary, and [runtime-backends.md](verification/runtime-backends.md#herdr) owns active evidence.
+
+## No-mistakes agent home (agent_path_override)
+
+No-mistakes pipeline agents inherit the daemon's environment, including the real `HOME`, so a CI step or repo script an agent runs locally can overwrite personal keys under `~/.config/sops`, `~/.secrets`, or `~/.ssh`.
+[`bin/fm-nm-agent-home.sh`](../bin/fm-nm-agent-home.sh) launches each pi, claude, or codex pipeline agent with a throwaway `mktemp -d` `HOME` and every `SOPS_AGE_*` variable unset, linking in only that agent's own config and copying in git and gh auth.
+The agent's own config stays a symlink so OAuth token refreshes and session reuse keep working; the residual is that an agent can still write through to that real config.
+Git identity and gh auth are copied, so a CI step or repo script that writes git or gh config (for example `git config --global`) cannot reach the real files.
+No-mistakes offers no per-agent environment setting, so the only lever is its machine-global `agent_path_override`, pointed at the `bin/nm-agent-home/<agent>` entries of the firstmate checkout on its default branch:
+
+```yaml
+# ~/.no-mistakes/config.yaml
+agent_path_override:
+  pi: /path/to/firstmate/bin/nm-agent-home/pi
+  claude: /path/to/firstmate/bin/nm-agent-home/claude
+  codex: /path/to/firstmate/bin/nm-agent-home/codex
+```
+
+That config serves every lane and repository on the machine, but no-mistakes reads it when each run starts, so a run already in progress keeps its agent; the daemon never needs a restart.
+Repo `commands` such as `commands.lint` run in the daemon itself, not through an agent, so they keep the daemon's `HOME`.
+The script's header owns the exact environment, link set, and refusal contract.
 
 ## Captain Preferences (data/captain.md / data/captain-shared.md)
 
