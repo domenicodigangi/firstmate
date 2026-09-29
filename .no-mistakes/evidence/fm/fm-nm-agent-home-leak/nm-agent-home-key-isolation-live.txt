@@ -1,0 +1,11 @@
+Live key-isolation run against the real launcher (bin/nm-agent-home/pi)
+with a sandboxed REAL_HOME containing a real SOPS age key, .secrets, and .ssh.
+
+agent HOME=/tmp/fm-live-s4.2yNSah/fm-nm-agent-home.l1dwWZO9
+sops_in_sandbox_before=no
+ssh_in_sandbox_before=no
+wrote clobbered key and git identity inside the sandbox
+real sops key after clobber attempt: real-key
+real git name after clobber attempt: live
+real .secrets/.ssh untouched: s / id
+real .pi/agent/auth.json untouched: pi-auth

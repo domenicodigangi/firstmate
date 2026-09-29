@@ -1,0 +1,82 @@
+
+===== S1 real pi binary through real launcher: env, shared cache, HOME cleanup, keys =====
+0.87.1
+launcher exit=0
+home=/tmp/fm-live-evidence.zGQKvV/fm-nm-agent-home.meukCxZe
+uv=/tmp/fm-live-evidence.zGQKvV/real-home/.cache/fm-nm-shared/uv
+npm=/tmp/fm-live-evidence.zGQKvV/real-home/.cache/fm-nm-shared/npm
+xdg_cache=unset
+sops_count=0
+shared cache modes:
+drwx------ fm-nm-shared
+drwx------ npm
+drwx------ uv
+throwaway HOMEs left: 0
+real sops key: real-key
+
+===== S2 uv downloads once, installs offline from shared cache with fresh HOME =====
+run1: agent HOME=/tmp/fm-live-evidence.zGQKvV/fm-nm-agent-home.KQYW2BZH UV=/tmp/fm-live-evidence.zGQKvV/real-home/.cache/fm-nm-shared/uv
+run1: Using Python 3.12.12 environment at: /tmp/fm-live-evidence.zGQKvV/venv
+run1: Resolved 1 package in 68ms
+run1: Prepared 1 package in 82ms
+run1: Installed 1 package in 23ms
+run1:  + six==1.17.0
+run1: uv exit=0
+removed six from venv: 0 copies remain
+run2-offline: agent HOME=/tmp/fm-live-evidence.zGQKvV/fm-nm-agent-home.2fuE0TOg UV=/tmp/fm-live-evidence.zGQKvV/real-home/.cache/fm-nm-shared/uv
+run2-offline: Using Python 3.12.12 environment at: /tmp/fm-live-evidence.zGQKvV/venv
+run2-offline: Resolved 1 package in 24ms
+run2-offline: Installed 1 package in 35ms
+run2-offline:  + six==1.17.0
+run2-offline: uv exit=0
+six restored offline from shared cache: 2 entries
+shared uv cache size: 152K
+throwaway HOMEs left: 0
+
+===== S3 npm uses shared cache across throwaway HOMEs (offline install) =====
+run1: agent HOME=/tmp/fm-live-evidence.zGQKvV/fm-nm-agent-home.ZOyXVQ4b npm_config_cache=/tmp/fm-live-evidence.zGQKvV/real-home/.cache/fm-nm-shared/npm
+run1: 
+run1: added 1 package in 8s
+run1: npm notice
+run1: npm notice New major version of npm available! 10.9.2 -> 12.1.0
+run1: npm notice Changelog: https://github.com/npm/cli/releases/tag/v12.1.0
+run1: npm notice To update run: npm install -g npm@12.1.0
+run1: npm notice
+run1: npm exit=0
+run2-offline: agent HOME=/tmp/fm-live-evidence.zGQKvV/fm-nm-agent-home.nD5uNBXO npm_config_cache=/tmp/fm-live-evidence.zGQKvV/real-home/.cache/fm-nm-shared/npm
+run2-offline: 
+run2-offline: added 1 package in 6s
+run2-offline: npm exit=0
+is-number present offline: 1
+shared npm cache size: 116K
+throwaway HOMEs left: 0
+
+===== S4 key isolation and config linking preserved =====
+/tmp/fm-live-evidence.zGQKvV/s4/pi: line 11: /tmp/fm-live-evidence.zGQKvV/fm-nm-agent-home.ohLqQkLh/.config/sops/age/keys.txt: No such file or directory
+HOME=/tmp/fm-live-evidence.zGQKvV/fm-nm-agent-home.ohLqQkLh
+pi_link=/tmp/fm-live-evidence.zGQKvV/real-home/.pi
+sops_present=no
+ssh_present=no
+secrets_present=no
+gitconfig_is_link=no
+gh_is_link=no
+real sops key after clobber: real-key
+real git name after clobber: live
+
+===== S5 nonzero agent exit propagates and HOME is still removed =====
+launcher exit=1 (real pi rejects the flag)
+recorded HOME=/tmp/fm-live-evidence.zGQKvV/fm-nm-agent-home.vuOU2Mg2 removed: YES
+
+===== S6 TERM forwarded to agent, launcher exits 143, HOME removed =====
+launcher exit=143 (expect 143)
+agent got TERM
+recorded HOME removed: YES
+
+===== S7 adversarial: SIGKILL launcher, live agent keeps HOME through next prune =====
+launcher=3068322 recorded_pid=3068415
+recorded pid is the running agent (not launcher): YES
+agent survives launcher SIGKILL: YES
+live agent HOME survived the next launch's prune: YES
+agent still alive: YES
+
+ALL LIVE SCENARIOS COMPLETED
