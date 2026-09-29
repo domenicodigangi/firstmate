@@ -255,6 +255,37 @@ test_prunes_dead_launch_homes_only() {
   pass "fm-nm-agent-home.sh: finished launch HOMEs are pruned without following links"
 }
 
+test_launcher_sigkill_keeps_running_agent_home() {
+  local launcher agent_pid home i
+  rm -f "$TMP_ROOT/started"
+  mkdir -p "$TMP_ROOT/kill-agents"
+  cat > "$TMP_ROOT/kill-agents/codex" <<'EOF'
+#!/usr/bin/env bash
+printf 'home=%s\n' "$HOME" > "$FAKE_OUT"
+touch "$FAKE_STARTED"
+while :; do sleep 0.1; done
+EOF
+  chmod +x "$TMP_ROOT/kill-agents/codex"
+  HOME="$REAL" TMPDIR="$SANDBOX_TMP" PATH="$LINKS:$TMP_ROOT/kill-agents:$PATH" FAKE_OUT="$TMP_ROOT/out" FAKE_SNAP="$TMP_ROOT/snap" \
+    FAKE_STARTED="$TMP_ROOT/started" "$LINKS/codex" < /dev/null &
+  launcher=$!
+  for i in $(seq 1 100); do [ -e "$TMP_ROOT/started" ] && break; sleep 0.1; done
+  [ -e "$TMP_ROOT/started" ] || fail "fake agent did not start"
+  home=$(field home)
+  for i in $(seq 1 100); do
+    agent_pid=$(head -n1 "$home/.fm-nm-agent-pid" 2>/dev/null)
+    [ -n "$agent_pid" ] && kill -0 "$agent_pid" 2>/dev/null && break
+    sleep 0.1
+  done
+  kill -KILL "$launcher"
+  wait "$launcher" 2>/dev/null
+  kill -0 "$agent_pid" 2>/dev/null || fail "the agent did not survive the launcher SIGKILL"
+  run_agent pi < /dev/null || fail "trigger launch failed"
+  assert_present "$home" "a new launch pruned the HOME of a still-running agent after its launcher was SIGKILLed"
+  kill -KILL "$agent_pid" 2>/dev/null
+  pass "fm-nm-agent-home.sh: a launcher SIGKILL does not prune its still-running agent's HOME"
+}
+
 test_launches_agent_with_throwaway_home
 test_agent_config_is_linked_and_git_gh_copied
 test_symlinked_git_gh_sources_are_copied_not_linked
@@ -265,3 +296,4 @@ test_signal_is_forwarded_and_home_removed
 test_exit_status_propagates
 test_refuses_unknown_or_missing_agent
 test_prunes_dead_launch_homes_only
+test_launcher_sigkill_keeps_running_agent_home

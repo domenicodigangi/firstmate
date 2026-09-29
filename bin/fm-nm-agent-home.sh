@@ -50,8 +50,9 @@
 #     INT, and HUP are forwarded to it, and the throwaway HOME is removed when
 #     it exits, on success, failure, or those signals. rm -rf never follows
 #     the links inside it.
-#   - Earlier launch HOMEs whose recorded launcher pid is gone are still
-#     removed first, which covers a launcher killed by SIGKILL.
+#   - Earlier launch HOMEs whose recorded agent pid is gone are still removed
+#     first, so a HOME whose agent has exited is reclaimed even when the
+#     launcher was killed by SIGKILL before it could run cleanup.
 #
 # Exit: the agent's own status (128 plus the signal number when the launcher
 # itself was signalled); 127 when the agent name is not pi, claude, or
@@ -174,6 +175,7 @@ trap 'forward HUP; wait "$agent_pid" 2>/dev/null; cleanup; exit 129' HUP
 # /dev/null, and a foreground wait would defer the signal traps.
 "$REAL_AGENT" "$@" <&0 &
 agent_pid=$!
+printf '%s\n' "$agent_pid" > "$SANDBOX/.fm-nm-agent-pid" || true
 wait "$agent_pid"
 status=$?
 trap - TERM INT HUP
