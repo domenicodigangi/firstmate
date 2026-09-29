@@ -31,13 +31,18 @@ for agent in pi claude codex; do
 {
   printf 'pid=%s\n' "$$"
   printf 'home=%s\n' "$HOME"
+  printf 'mode=%s\n' "$(stat -c %a "$HOME" 2>/dev/null || stat -f %Lp "$HOME")"
   printf 'args=%s\n' "$*"
   printf 'stdin=%s\n' "$(cat)"
   printf 'sops=%s\n' "$(env | grep -c '^SOPS_AGE_' || true)"
   printf 'xdg_config=%s\n' "${XDG_CONFIG_HOME-unset}"
   printf 'runtime=%s\n' "${XDG_RUNTIME_DIR-unset}"
+  printf 'uv_cache=%s\n' "${UV_CACHE_DIR-unset}"
+  printf 'npm_cache=%s\n' "${npm_config_cache-unset}"
 } > "$FAKE_OUT"
 [ -z "${FAKE_STEP:-}" ] || sh -c "$FAKE_STEP"
+rm -rf "$FAKE_SNAP"
+cp -a "$HOME" "$FAKE_SNAP"
 exit "${FAKE_EXIT:-0}"
 EOF
   chmod +x "$FAKE/$agent"
@@ -48,7 +53,7 @@ mkdir -p "$SANDBOX_TMP"
 
 run_agent() {  # <agent> [args...]; stdin is forwarded
   HOME="$REAL" TMPDIR="$SANDBOX_TMP" PATH="$LINKS:$FAKE:$PATH" \
-    FAKE_OUT="$TMP_ROOT/out" "$LINKS/$1" "${@:2}"
+    FAKE_OUT="$TMP_ROOT/out" FAKE_SNAP="$TMP_ROOT/snap" "$LINKS/$1" "${@:2}"
 }
 
 field() { sed -n "s/^$1=//p" "$TMP_ROOT/out"; }
@@ -63,7 +68,7 @@ test_launches_agent_with_throwaway_home() {
   home=$(field home)
   assert_not_equals "$REAL" "$home" "agent kept the real HOME"
   case "$home" in "$SANDBOX_TMP"/fm-nm-agent-home.*) ;; *) fail "throwaway HOME is not a fresh mktemp dir under TMPDIR: $home" ;; esac
-  assert_equals 700 "$(stat -c %a "$home" 2>/dev/null || stat -f %Lp "$home")" "throwaway HOME is not private"
+  assert_equals 700 "$(field mode)" "throwaway HOME is not private"
   assert_equals "--mode json --session a b" "$(field args)" "agent argv was not passed through unchanged"
   assert_equals "the prompt" "$(field stdin)" "agent stdin was not forwarded"
   assert_equals 0 "$(field sops)" "SOPS_AGE_* variables reached the agent"
@@ -75,7 +80,7 @@ test_launches_agent_with_throwaway_home() {
 test_agent_config_is_linked_and_git_gh_copied() {
   local home
   run_agent pi < /dev/null || fail "pi launch failed"
-  home=$(field home)
+  home="$TMP_ROOT/snap"
   [ -L "$home/.pi" ] || fail "pi config was not linked into the throwaway HOME"
   assert_equals "$REAL/.pi" "$(readlink "$home/.pi")" "pi config link does not reach the real config"
   [ ! -L "$home/.gitconfig" ] || fail "git identity was symlinked, exposing the real file to writes"
@@ -92,7 +97,7 @@ test_agent_config_is_linked_and_git_gh_copied() {
   # shellcheck disable=SC2016 # The step runs later, inside the agent's HOME.
   step='unset GIT_CONFIG_GLOBAL GIT_CONFIG_NOSYSTEM; git config --global user.name clobbered && echo clobbered > "$HOME/.config/git/config" && echo clobbered > "$HOME/.config/gh/hosts.yml"'
   FAKE_STEP=$step run_agent pi < /dev/null || fail "pi launch with a git/gh write step failed"
-  home=$(field home)
+  home="$TMP_ROOT/snap"
   grep -q 'clobbered' "$home/.gitconfig" || fail "the step did not write the throwaway HOME's git identity"
   grep -q 'name = t' "$REAL/.gitconfig" || fail "a write through the throwaway HOME changed the real git identity"
   assert_equals '[init]
@@ -100,10 +105,10 @@ test_agent_config_is_linked_and_git_gh_copied() {
   assert_equals gh-token "$(cat "$REAL/.config/gh/hosts.yml")" "a write through the throwaway HOME changed the real gh auth"
 
   run_agent claude < /dev/null || fail "claude launch failed"
-  home=$(field home)
+  home="$TMP_ROOT/snap"
   [ -L "$home/.claude" ] && [ -L "$home/.claude.json" ] || fail "claude config was not linked"
   run_agent codex < /dev/null || fail "codex launch failed"
-  home=$(field home)
+  home="$TMP_ROOT/snap"
   [ -L "$home/.codex" ] || fail "codex config was not linked"
   pass "fm-nm-agent-home.sh: agent config is linked, git and gh auth are copied and write-isolated"
 }
@@ -120,9 +125,9 @@ test_symlinked_git_gh_sources_are_copied_not_linked() {
   ln -s "$dotfiles/git" "$real/.config/git"
   ln -s "$dotfiles/gh" "$real/.config/gh"
 
-  HOME="$real" TMPDIR="$SANDBOX_TMP" PATH="$LINKS:$FAKE:$PATH" FAKE_OUT="$TMP_ROOT/out" \
+  HOME="$real" TMPDIR="$SANDBOX_TMP" PATH="$LINKS:$FAKE:$PATH" FAKE_OUT="$TMP_ROOT/out" FAKE_SNAP="$TMP_ROOT/snap" \
     "$LINKS/pi" < /dev/null || fail "pi launch failed"
-  home=$(field home)
+  home="$TMP_ROOT/snap"
   [ ! -L "$home/.gitconfig" ] || fail "a symlinked git identity was copied as a link"
   [ ! -L "$home/.config/git" ] || fail "a symlinked git config was copied as a link"
   [ ! -L "$home/.config/gh" ] || fail "a symlinked gh auth was copied as a link"
@@ -132,7 +137,7 @@ test_symlinked_git_gh_sources_are_copied_not_linked() {
 
   # shellcheck disable=SC2016 # The step runs later, inside the agent's HOME.
   step='unset GIT_CONFIG_GLOBAL GIT_CONFIG_NOSYSTEM; git config --global user.name clobbered && echo clobbered > "$HOME/.config/git/config" && echo clobbered > "$HOME/.config/gh/hosts.yml"'
-  FAKE_STEP=$step HOME="$real" TMPDIR="$SANDBOX_TMP" PATH="$LINKS:$FAKE:$PATH" FAKE_OUT="$TMP_ROOT/out" \
+  FAKE_STEP=$step HOME="$real" TMPDIR="$SANDBOX_TMP" PATH="$LINKS:$FAKE:$PATH" FAKE_OUT="$TMP_ROOT/out" FAKE_SNAP="$TMP_ROOT/snap" \
     "$LINKS/pi" < /dev/null || fail "pi launch with a git/gh write step failed"
   grep -q 'name = sym' "$dotfiles/gitconfig" || fail "a write through the throwaway HOME changed the symlinked real git identity"
   assert_equals '[init]
@@ -152,14 +157,64 @@ test_ci_step_cannot_clobber_real_keys() {
   pass "fm-nm-agent-home.sh: a CI step writing ~/.config/sops, ~/.secrets, or ~/.ssh lands in the throwaway HOME"
 }
 
-test_agent_replaces_the_launcher_process() {
-  local pid
-  HOME="$REAL" TMPDIR="$SANDBOX_TMP" PATH="$LINKS:$FAKE:$PATH" FAKE_OUT="$TMP_ROOT/out" \
-    "$LINKS/pi" < /dev/null &
+test_shared_package_caches() {
+  local home
+  UV_CACHE_DIR=/elsewhere/uv XDG_CACHE_HOME="$TMP_ROOT/xdg-cache" run_agent pi < /dev/null || fail "pi launch failed"
+  assert_equals "$TMP_ROOT/xdg-cache/fm-nm-shared/uv" "$(field uv_cache)" "UV_CACHE_DIR is not the shared uv cache"
+  assert_equals "$TMP_ROOT/xdg-cache/fm-nm-shared/npm" "$(field npm_cache)" "npm_config_cache is not the shared npm cache"
+  [ -d "$TMP_ROOT/xdg-cache/fm-nm-shared/uv" ] || fail "shared uv cache was not created"
+
+  run_agent claude < /dev/null || fail "claude launch failed"
+  home=$(field home)
+  assert_equals "$REAL/.cache/fm-nm-shared/uv" "$(field uv_cache)" "default shared uv cache is not under the real HOME's .cache"
+  assert_equals "$REAL/.cache/fm-nm-shared/npm" "$(field npm_cache)" "default shared npm cache is not under the real HOME's .cache"
+  case "$(field uv_cache)" in "$home"/*) fail "shared cache lives inside the throwaway HOME" ;; esac
+
+  # Two runs share cached files: a file placed by the first is hardlinkable in the second.
+  FAKE_STEP='echo pkg > "$UV_CACHE_DIR/pkg"' run_agent pi < /dev/null || fail "first cache run failed"
+  FAKE_STEP='test -f "$UV_CACHE_DIR/pkg" && ln "$UV_CACHE_DIR/pkg" "$UV_CACHE_DIR/pkg.link"' run_agent pi < /dev/null \
+    || fail "second run did not see the first run's cached file"
+  assert_equals 2 "$(stat -c %h "$REAL/.cache/fm-nm-shared/uv/pkg" 2>/dev/null || stat -f %l "$REAL/.cache/fm-nm-shared/uv/pkg")" "cached file was not hardlinked across runs"
+  pass "fm-nm-agent-home.sh: package caches are shared outside the throwaway HOME and survive across runs"
+}
+
+test_throwaway_home_removed_on_exit() {
+  local home
+  FAKE_EXIT=3 run_agent pi < /dev/null
+  assert_equals 3 "$?" "failing agent status was not propagated"
+  home=$(field home)
+  assert_absent "$home" "throwaway HOME survived a failing agent"
+  run_agent claude < /dev/null || fail "claude launch failed"
+  assert_absent "$(field home)" "throwaway HOME survived a successful agent"
+  assert_present "$REAL/.claude.json" "cleanup followed a link into the real config"
+  assert_present "$REAL/.pi/agent/auth.json" "cleanup followed a link into the real config"
+  assert_equals 0 "$(find "$SANDBOX_TMP" -maxdepth 1 -name 'fm-nm-agent-home.*' | wc -l | tr -d ' ')" "an fm-nm-agent-home.* directory remains after runs"
+  pass "fm-nm-agent-home.sh: the throwaway HOME is removed when the agent exits"
+}
+
+test_signal_is_forwarded_and_home_removed() {
+  local pid i home
+  rm -f "$TMP_ROOT/started"
+  mkdir -p "$TMP_ROOT/loop-agents"
+  cat > "$TMP_ROOT/loop-agents/codex" <<'EOF'
+#!/usr/bin/env bash
+printf 'home=%s\n' "$HOME" > "$FAKE_OUT"
+trap 'exit 9' TERM
+touch "$FAKE_STARTED"
+while :; do sleep 0.1; done
+EOF
+  chmod +x "$TMP_ROOT/loop-agents/codex"
+  HOME="$REAL" TMPDIR="$SANDBOX_TMP" PATH="$LINKS:$TMP_ROOT/loop-agents:$PATH" FAKE_OUT="$TMP_ROOT/out" FAKE_SNAP="$TMP_ROOT/snap" \
+    FAKE_STARTED="$TMP_ROOT/started" "$LINKS/codex" < /dev/null &
   pid=$!
+  for i in $(seq 1 100); do [ -e "$TMP_ROOT/started" ] && break; sleep 0.1; done
+  [ -e "$TMP_ROOT/started" ] || fail "fake agent did not start"
+  kill -TERM "$pid"
   wait "$pid"
-  assert_equals "$pid" "$(field pid)" "agent ran as a child, so killing the launcher would orphan it"
-  pass "fm-nm-agent-home.sh: the agent replaces the launcher process"
+  assert_equals 143 "$?" "launcher did not exit 143 after TERM"
+  home=$(field home)
+  assert_absent "$home" "throwaway HOME survived a signalled launch"
+  pass "fm-nm-agent-home.sh: a signal reaches the agent and the throwaway HOME is still removed"
 }
 
 test_exit_status_propagates() {
@@ -202,7 +257,9 @@ test_launches_agent_with_throwaway_home
 test_agent_config_is_linked_and_git_gh_copied
 test_symlinked_git_gh_sources_are_copied_not_linked
 test_ci_step_cannot_clobber_real_keys
-test_agent_replaces_the_launcher_process
+test_shared_package_caches
+test_throwaway_home_removed_on_exit
+test_signal_is_forwarded_and_home_removed
 test_exit_status_propagates
 test_refuses_unknown_or_missing_agent
 test_prunes_dead_launch_homes_only

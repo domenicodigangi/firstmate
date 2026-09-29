@@ -617,6 +617,8 @@ No-mistakes pipeline agents inherit the daemon's environment, including the real
 [`bin/fm-nm-agent-home.sh`](../bin/fm-nm-agent-home.sh) launches each pi, claude, or codex pipeline agent with a throwaway `mktemp -d` `HOME` and every `SOPS_AGE_*` variable unset, linking in only that agent's own config and copying in git and gh auth.
 The agent's own config stays a symlink so OAuth token refreshes and session reuse keep working; the residual is that an agent can still write through to that real config.
 Git identity and gh auth are copied, so a CI step or repo script that writes git or gh config (for example `git config --global`) cannot reach the real files.
+The launcher runs the agent as a child, forwards TERM, INT, and HUP to it, and removes the throwaway `HOME` when the agent exits, so finished runs leave no `fm-nm-agent-home.*` directory behind.
+UV_CACHE_DIR and npm_config_cache point at a shared package cache under `${XDG_CACHE_HOME:-$HOME/.cache}/fm-nm-shared/{uv,npm}`, so runs reuse downloads and uv can hardlink; that directory is private and holds packages only, never credentials.
 No-mistakes offers no per-agent environment setting, so the only lever is its machine-global `agent_path_override`, pointed at the `bin/nm-agent-home/<agent>` entries of the firstmate checkout on its default branch:
 
 ```yaml
