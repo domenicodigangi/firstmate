@@ -26,7 +26,7 @@ The tier is a property of the harness surface, not of the home.
 
 | Tier | What the adapter does | Used by |
 | --- | --- | --- |
-| Run | Executes `bin/fm-session-start.sh` through the native session-open adapter and gates its ordered digest into model context before the first turn. | Claude, `codex exec`, Pi / pi-signed, omp, Cursor |
+| Run | Executes `bin/fm-session-start.sh` through the native session-open adapter and gates its ordered digest into model context before the first turn. | Claude, `codex exec`, Pi / pi-signed, omp, Cursor, Antigravity (agy) |
 | Nudge | Asks the agent to run the digest through the native adapter or the tracked session-start instruction. | Grok, OpenCode, and run-tier sources routed to the nudge |
 
 Codex's interactive TUI has no tracked session-open, compaction, or re-emit channel and is not covered by either tier.
@@ -43,6 +43,7 @@ Codex's interactive TUI has no tracked session-open, compaction, or re-emit chan
 | Grok | Nudge | [Grok](#grok) |
 | Cursor | Run | [Cursor](#cursor) |
 | omp | Run | [omp](#omp) |
+| Antigravity (agy) | Run | [Antigravity (agy)](#antigravity-agy) |
 | Cursor compaction | Uncovered | [Cursor compaction](#cursor-compaction) |
 
 ### Why the run tier exists
@@ -141,9 +142,12 @@ Some digest work remains local but unbounded:
 
 - Tool version probes.
 - The backlog listing.
-- The per-task endpoint reads.
 
 So the whole digest still runs as one bounded child, default 120s via `FM_SESSION_START_TIMEOUT`.
+
+Each per-task endpoint liveness read runs serially in its own crash-isolated child, bounded by `FM_SESSION_START_ENDPOINT_TIMEOUT` (default 10s; a non-numeric or zero value falls back to the default).
+So a read that hangs or dies becomes that task's own `endpoint: error` line and the digest continues.
+With a wedged backend the stage's ceiling is tasks times that per-read bound and can itself reach the digest bound.
 
 The per-item backlog row reads inside bootstrap's reconcile and close-replay sweeps are the exception.
 Each of those reads is bounded by `FM_BACKLOG_ROW_TIMEOUT_SECS` (default 10s) through `bin/fm-backlog-transition-lib.sh`.
@@ -153,16 +157,18 @@ Later reads in that sweep then return immediately while still naming their own i
 When timeout, gtimeout, and perl are unavailable, the shared timeout owner falls back to a pure-Bash process-group watchdog.
 So no supported host runs the digest unbounded.
 
-### When the bound is hit
+### When the child stops early
 
 The child streams into the native transport as it runs.
-So everything emitted before the bound was hit is retained for delivery.
-The parent then prints a `STARTUP TRUNCATED` banner that names:
+So everything emitted before the child stopped is retained for delivery.
+The parent then prints a `STARTUP TRUNCATED` banner on any nonzero child exit, not only the bound, that names:
 
 - The stage that did not finish.
 - The stages that were therefore never emitted.
+- Whether the child hit its bound or died unexpectedly with its exit status.
 
 The parent still exits 0.
+The regression evidence for both shapes is in [`docs/verification/supervision.md`](verification/supervision.md#per-task-endpoint-reads-cannot-truncate-the-digest).
 The registered hook timeouts sit above that budget, so the harness never preempts the banner.
 
 The deferred startup stage deliberately runs in its own process group under its own deadline.
@@ -177,6 +183,11 @@ So a truncated digest does neither of these:
 
 - They source `bin/fm-gate-refuse-lib.sh` and stay silent for a no-mistakes gate agent identified by `NO_MISTAKES_GATE` or a `.no-mistakes/repos/*.git` git-common-dir.
 - They share `bin/fm-primary-scope-lib.sh` with `bin/fm-turnend-guard.sh`, so every hook uses one primary-detection owner.
+
+A fresh clone has no gitignored state directory yet.
+When the root otherwise qualifies as primary, the run wrapper creates the state directory before the unchanged scope check, so the first session takes the helm without a manual `mkdir state`.
+If that creation fails, the run wrapper prints one stderr line naming the state directory and the reason, then stands down as it would for any ineligible root.
+The nudge wrapper and every other hook still stand down while the state directory is missing.
 
 The Guard Predicates section of [`turnend-guard.md`](turnend-guard.md#guard-predicates) owns marker validation, plain-checkout detection, and required Firstmate-shaped paths.
 
@@ -200,6 +211,7 @@ It does this in its own separate, hard-coded loop, independent of two other owne
 - Pi's `lockOwnership()`.
 
 If the lock names a live pid in that ancestry, session start already ran in this harness session and the wrapper stays silent.
+On Windows/Git Bash, a lock holding a tagged `win:<pid>` identity is outside this process table, so the wrapper instead asks the library's `fm_session_lock_owned_by_self`, whose Windows process-boundary bridge owns that identity.
 
 ### Exit codes
 
@@ -228,6 +240,9 @@ Claude is a run-tier harness.
 `.claude/settings.json` registers one unmatched `SessionStart` hook, invoked through `CLAUDE_PROJECT_DIR` with a 180s timeout.
 The wrapper reads `source` from the hook payload.
 Native stdout context injection is supported.
+Claude caps one hook output string at 10,000 characters.
+Above the cap the model receives a preview of the first 2,000 characters plus the path of a saved file, and is not asked to read that file.
+A context re-emit therefore prints a short `RE-EMIT CUE` first, which tells the model to read the saved file.
 
 ### Codex exec
 
@@ -301,14 +316,14 @@ The `.opencode/plugins/fm-primary-sessionstart-nudge.js` plugin does three thing
 
 - It listens for `session.created`.
 - It runs once per session id.
-- It calls `client.session.promptAsync` only when the wrapper prints a nudge.
+- It calls `ctx.session.prompt` only when the wrapper prints a nudge.
 
 Interactive TUI delivery is supported.
 Headless `opencode run` is intentionally fail-open, because the process can exit before the queued turn.
 That early exit is also why OpenCode cannot use the run tier.
 
 The OpenCode nudge runs only on `session.created`.
-The watcher-arm and turn-end plugins run later, on `session.idle`.
+The watcher-arm and turn-end plugins run later, on the terminal `session.execution.succeeded`, `session.execution.failed`, and `session.execution.interrupted` events in OpenCode 2, or `session.idle` in OpenCode 1.
 The guard lets the watcher coordinator act first, so the plugins do not race for one lifecycle event.
 
 ### Grok
@@ -355,6 +370,15 @@ So the source is derived following the Cursor precedent:
 A later in-process `clear` re-emits only when this lock owner completed a full startup.
 `before_agent_start` message delivery was verified to reach model context on 18.1.11.
 
+### Antigravity (agy)
+
+Antigravity CLI is a run-tier harness.
+`.agents/hooks.json` registers `SessionStart`, anchored to the project root with a 30s timeout, invoking `bin/fm-sessionstart-agy.sh`.
+The wrapper drains stdin for the payload's `source` and delegates to `bin/fm-sessionstart-run.sh`, which owns primary or persistent secondmate home scope, source routing, and the digest.
+In linked crewmate worktrees or foreign checkouts, `bin/fm-sessionstart-run.sh` stands down silently and the wrapper emits `{}`.
+In primary or secondmate homes, the wrapper emits the captured digest as `{injectSteps:[{systemMessage:{systemMessage:$digest}}]}` on stdout with exit 0.
+Native stdout context injection gates the ordered digest into model context before the first agent turn.
+
 ### Cursor compaction
 
 Cursor compaction is uncovered and has no tracked transport.
@@ -382,6 +406,8 @@ It proves the nudge wrapper's silence for these cases:
 It also proves the nudge wrapper's exact U+2063 `FIRSTMATE_OP:`-prefixed, `session-start`-typed one-line output.
 
 It separately proves the run wrapper's silence for the gate environment and an unmarked linked worktree, including the internal Pi prerequisite's explicit silent stand-down.
+It proves the run wrapper creates a missing state directory on a fresh primary and delivers the full digest, while an unmarked linked worktree gets none.
+It proves a fresh primary whose state directory cannot be created reports that on one stderr line and stands down without a digest.
 
 It proves the run wrapper's source routing end to end against a real `fm-session-start.sh`, including:
 
