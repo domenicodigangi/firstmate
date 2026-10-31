@@ -22,6 +22,23 @@ ARM_FAIL_EXIT_POLLS=400
 
 TMP_ROOT=$(fm_test_tmproot fm-watcher-lock-tests)
 
+# Execute the actual disposable-checkout guard before any watcher can start.
+lab="$TMP_ROOT/marked-lab"
+foreign_state="$TMP_ROOT/foreign-state"
+checkout="$TMP_ROOT/.no-mistakes/worktrees/guard/bin"
+mkdir -p "$lab" "$foreign_state" "$checkout"
+. "$ROOT/bin/fm-gate-refuse-lib.sh"
+fm_gate_lab_mark "$lab" || fail "could not mark the watcher lab"
+cp "$WATCH_ARM" "$ROOT/bin/fm-gate-refuse-lib.sh" "$checkout/"
+if env -u FM_GATE_REFUSE_BYPASS -u FM_STATE_OVERRIDE FM_HOME="$lab" STATE="$foreign_state" \
+  bash "$checkout/fm-watch-arm.sh" > "$TMP_ROOT/lab-guard.out" 2>&1; then
+  fail "disposable watcher accepted an inherited state outside its lab"
+fi
+grep -q 'refusing to arm from a disposable validation checkout' "$TMP_ROOT/lab-guard.out" \
+  || fail "disposable watcher did not reject the relocated state"
+[ ! -e "$foreign_state/.watch.lock" ] || fail "disposable watcher touched outside state"
+pass "disposable watcher refuses inherited state outside its marked lab"
+
 drain_and_ack() {  # <state>
   local state=$1 err sequence generation
   err="$state/.test-drain.err"
@@ -229,6 +246,126 @@ test_live_stalled_watch_lock_is_replaced_past_hard_bound() {
   pass "live watcher lock with a beacon past the hard bound is replaced, under it is still refused"
 }
 
+# Stop <pid> at a moment it holds no state lock but the watch lock, so a
+# successor never waits on a lock the stopped holder cannot release.
+stop_outside_state_locks() {  # <pid> <state>
+  local pid=$1 state=$2 i=0 lock held
+  while [ "$i" -lt 100 ]; do
+    kill -STOP "$pid" 2>/dev/null || return 1
+    held=0
+    for lock in "$state"/.*.lock "$state"/.*.lock.steal "$state"/*.lock; do
+      [ "$lock" != "$state/.watch.lock" ] || continue
+      [ "$(cat "$lock/pid" 2>/dev/null || true)" != "$pid" ] || { held=1; break; }
+    done
+    [ "$held" -eq 1 ] || return 0
+    kill -CONT "$pid" 2>/dev/null || true
+    sleep 0.05
+    i=$((i + 1))
+  done
+  return 1
+}
+
+# Issue #7801: on a /proc-less host outside UTC, a watcher started before
+# fm_pid_identity pinned TZ=UTC0 recorded its lstart in local time, so after the
+# update its own identity no longer recomputes. A fresh watcher must replace that
+# live holder instead of standing down beside it, and the old watcher must stand
+# down on its own (exit 0) without being terminated. <successor-first> 1 pauses
+# the old watcher until the successor has delivered its recovery wake and exited,
+# so the old watcher then finds no lock holder at all in a state directory that
+# was never torn down.
+run_legacy_identity_takeover() {  # <case> <successor-first>
+  local case_name=$1 successor_first=$2
+  local dir state fakebin no_proc old new old_out new_out legacy current i lock_pid old_rc claimed released
+  dir=$(make_case "$case_name")
+  state="$dir/state"
+  fakebin="$dir/fakebin"
+  no_proc="$dir/no-proc"
+  old_out="$dir/old-watch.out"
+  new_out="$dir/new-watch.out"
+  mkdir -p "$no_proc"
+  PATH="$fakebin:$PATH" FM_PROC_ROOT_OVERRIDE="$no_proc" TZ=America/Los_Angeles FM_HOME="$dir" FM_STATE_OVERRIDE="$state" FM_GUARD_GRACE=1 FM_POLL=1 FM_SIGNAL_GRACE=1 FM_CHECK_INTERVAL=999999 FM_HEARTBEAT=999999 "$WATCH" > "$old_out" 2>&1 &
+  old=$!
+  i=0
+  lock_pid=
+  current=
+  while [ "$i" -lt 100 ] && is_live_non_zombie "$old"; do
+    lock_pid=$(cat "$state/.watch.lock/pid" 2>/dev/null || true)
+    current=$(cat "$state/.watch.lock/pid-identity" 2>/dev/null || true)
+    [ "$lock_pid" = "$old" ] && [ -n "$current" ] && break
+    sleep 0.1
+    i=$((i + 1))
+  done
+  [ "$lock_pid" = "$old" ] && [ -n "$current" ] || fail "first watcher did not claim the lock: $(cat "$old_out")"
+  legacy=$(COLUMNS=10000 LC_ALL=C TZ=America/Los_Angeles ps -p "$old" -o lstart= -o command= 2>/dev/null | sed 's/^[[:space:]]*//')
+  [ -n "$legacy" ] && [ "$legacy" != "$current" ] \
+    || fail "the legacy local-time identity does not differ from the UTC identity, so this case would pass vacuously ('$legacy')"
+  # A pre-pin build recorded no start time either, so drop it to leave only the
+  # legacy identity as the holder's record.
+  rm -f "$state/.watch.lock/pid-start"
+  printf '%s\n' "$legacy" > "$state/.watch.lock/pid-identity"
+  is_live_non_zombie "$old" || fail "the old holder exited before its successor started, so the replacement would not be exercised: $(cat "$old_out")"
+  if [ "$successor_first" -eq 1 ]; then
+    stop_outside_state_locks "$old" "$state" \
+      || fail "could not pause the old holder outside its state locks: $(cat "$old_out")"
+  fi
+  PATH="$fakebin:$PATH" FM_PROC_ROOT_OVERRIDE="$no_proc" TZ=America/Los_Angeles FM_HOME="$dir" FM_STATE_OVERRIDE="$state" FM_GUARD_GRACE=1 FM_POLL=1 FM_SIGNAL_GRACE=1 FM_CHECK_INTERVAL=999999 FM_HEARTBEAT=999999 "$WATCH" > "$new_out" 2>&1 &
+  new=$!
+  i=0
+  claimed=0
+  while [ "$i" -lt 100 ] && is_live_non_zombie "$new"; do
+    lock_pid=$(cat "$state/.watch.lock/pid" 2>/dev/null || true)
+    [ "$lock_pid" = "$new" ] && { claimed=1; break; }
+    sleep 0.1
+    i=$((i + 1))
+  done
+  if [ "$successor_first" -eq 1 ]; then
+    i=0
+    while [ "$i" -lt 200 ] && is_live_non_zombie "$new"; do
+      sleep 0.1
+      i=$((i + 1))
+    done
+    released=$([ -e "$state/.watch.lock/pid" ] && echo no || echo yes)
+    # Resume before any assertion can fail, so a failure never strands it stopped.
+    kill -CONT "$old" 2>/dev/null || true
+    is_live_non_zombie "$new" && fail "the successor never delivered its recovery wake and exited: $(cat "$new_out")"
+    wait "$new" || fail "the successor did not exit cleanly after its recovery wake: $(cat "$new_out")"
+    # A successor that held the lock delivers a wake; one that stood down prints
+    # only a watcher: refusal.
+    [ "$claimed" -eq 1 ] || grep -q '^check: ' "$new_out" \
+      || fail "a fresh watcher stood down beside a live holder whose legacy identity no longer recomputes: $(cat "$new_out")"
+    [ "$released" = yes ] || fail "the exited successor left a lock holder behind, so the old watcher would not find the lock released"
+  else
+    [ "$claimed" -eq 1 ] || fail "a fresh watcher stood down beside a live holder whose legacy identity no longer recomputes: $(cat "$new_out")"
+  fi
+  # The old holder may already have stood down by now, so its clean exit below,
+  # not its liveness here, proves it saw the successor's claim.
+  i=0
+  while [ "$i" -lt 200 ] && is_live_non_zombie "$old"; do
+    sleep 0.1
+    i=$((i + 1))
+  done
+  is_live_non_zombie "$old" && fail "the replaced watcher kept running beside its successor"
+  wait "$old"
+  old_rc=$?
+  [ "$old_rc" -eq 0 ] || fail "the replaced watcher did not stand down on its own (exit $old_rc): $(cat "$old_out")"
+  ! grep -q 'watcher: exiting' "$old_out" || fail "the replaced watcher exited for another reason, not by standing down: $(cat "$old_out")"
+  kill "$new" 2>/dev/null || true
+  wait "$new" 2>/dev/null || true
+}
+
+test_watch_replaces_live_holder_with_legacy_local_time_identity() {
+  run_legacy_identity_takeover watch-legacy-local-time-identity 0
+  pass "a fresh watcher replaces a live holder whose pre-UTC-pin identity no longer recomputes, and the old holder stands down unsignalled"
+}
+
+test_watch_replaced_holder_stands_down_after_successor_exits() {
+  # The successor delivers its recovery wake and exits, releasing the lock,
+  # before the old holder looks again. That released lock is not a torn-down
+  # state directory, so the old holder still stands down with exit 0.
+  run_legacy_identity_takeover watch-legacy-identity-successor-exited 1
+  pass "a replaced holder stands down cleanly even when its successor has already exited and released the lock"
+}
+
 test_guard_warnings() {
   # The guard's two operator-visible states, with resilient substrings instead of
   # four copy-coupled tests:
@@ -356,33 +493,340 @@ test_lock_steals_dead_pid_lock() {
   pass "dead-pid stale lock is reclaimed by a single acquirer"
 }
 
+# Start a process that claims each given link lock, then SIGKILL it so every
+# claim is left behind with a dead owner - an acquirer TERMed mid-steal.
+leave_dead_link_locks() {  # <state> <lock>...
+  local state=$1 holder i last
+  shift
+  last=${!#}
+  FM_STATE_OVERRIDE="$state" bash -c '
+    . "$1"
+    shift
+    for lock do fm_lock_try_create "$lock" || exit 7; done
+    exec sleep 30
+  ' _ "$LIB" "$@" >/dev/null 2>&1 &
+  holder=$!
+  # A loaded serial shard can stall the holder's startup past a second; allow
+  # the same ~5s as this file's other child-startup waits.
+  i=0
+  while [ "$i" -lt 250 ] && [ ! -s "$last/pid" ]; do
+    sleep 0.02
+    i=$((i + 1))
+  done
+  [ -s "$last/pid" ] || fail "dead link-lock owner did not publish its pid"
+  kill -KILL "$holder" 2>/dev/null || true
+  wait "$holder" 2>/dev/null || true
+}
+
+test_lock_reclaims_dead_steal_owner_without_nested_markers() {
+  local dir state lockdir fakebin lnlog rc
+  dir=$(make_case lock-dead-steal-owner)
+  state="$dir/state"
+  lockdir="$state/.contend.lock"
+  fakebin="$dir/fakebin"
+  lnlog="$dir/ln.log"
+  mkdir "$lockdir"
+  printf '%s\n' "$(dead_pid)" > "$lockdir/pid"
+  leave_dead_link_locks "$state" "$lockdir.steal"
+  cat > "$fakebin/ln" <<'SH'
+#!/usr/bin/env bash
+last=
+for arg do last=$arg; done
+printf '%s\n' "$last" >> "$FM_TEST_LN_LOG"
+exec /bin/ln "$@"
+SH
+  chmod +x "$fakebin/ln"
+  : > "$lnlog"
+
+  rc=0
+  PATH="$fakebin:$PATH" FM_TEST_LN_LOG="$lnlog" FM_STATE_OVERRIDE="$state" bash -c '
+    . "$1"
+    fm_lock_try_acquire "$2" || exit 8
+    fm_lock_release "$2"
+  ' _ "$LIB" "$lockdir" || rc=$?
+  [ "$rc" -eq 0 ] || fail "acquirer could not reclaim dead steal owner (rc=$rc)"
+  ! grep -q '\.steal\.steal$' "$lnlog" \
+    || fail "reclaiming a dead steal owner created a nested steal marker: $(tr '\n' ' ' < "$lnlog")"
+  [ ! -e "$lockdir.steal" ] && [ ! -L "$lockdir.steal" ] \
+    || fail "dead steal mutex remained linked after successful reclaim"
+  pass "dead steal owner is reclaimed once without a nested steal marker"
+}
+
+test_lock_recovers_dead_nested_steal_chain() {
+  local dir state lockdir rc marker
+  dir=$(make_case lock-dead-nested-steal-chain)
+  state="$dir/state"
+  lockdir="$state/.contend.lock"
+  mkdir "$lockdir"
+  printf '%s\n' "$(dead_pid)" > "$lockdir/pid"
+  leave_dead_link_locks "$state" "$lockdir.steal" "$lockdir.steal.steal"
+
+  rc=0
+  FM_STATE_OVERRIDE="$state" bash -c '
+    . "$1"
+    fm_lock_try_acquire "$2" || exit 8
+    fm_lock_release "$2"
+  ' _ "$LIB" "$lockdir" || rc=$?
+  [ "$rc" -eq 0 ] || fail "dead nested steal chain kept the lock unrecoverable (rc=$rc)"
+  for marker in "$lockdir.steal" "$lockdir.steal.steal"; do
+    [ ! -e "$marker" ] && [ ! -L "$marker" ] || fail "dead steal marker remained: $marker"
+  done
+  pass "dead nested steal chain from an interrupted reclaim is recovered"
+}
+
+test_lock_reclaims_self_held_steal_mutex() {
+  # A TERM that lands while this process holds the steal mutex runs the EXIT
+  # path, which re-acquires the same dead-owner lock. The abandoned steal hold
+  # is this process's own and must not wedge that exit path.
+  local dir state lockdir rc
+  dir=$(make_case lock-self-held-steal)
+  state="$dir/state"
+  lockdir="$state/.contend.lock"
+  mkdir "$lockdir"
+  printf '%s\n' "$(dead_pid)" > "$lockdir/pid"
+
+  rc=0
+  FM_STATE_OVERRIDE="$state" bash -c '
+    . "$1"
+    fm_lock_try_create "$2.steal" || exit 7
+    fm_lock_try_acquire "$2" || exit 8
+    [ "$(cat "$2/pid" 2>/dev/null)" = "${BASHPID:-$$}" ] || exit 9
+    fm_lock_release "$2"
+  ' _ "$LIB" "$lockdir" || rc=$?
+  [ "$rc" -eq 0 ] || fail "self-held steal mutex blocked reclaiming a dead-owner lock (rc=$rc)"
+  [ ! -e "$lockdir.steal" ] && [ ! -L "$lockdir.steal" ] \
+    || fail "self-held steal mutex remained linked after reclaim"
+  pass "a steal mutex abandoned by this process does not block its own reclaim"
+}
+
+test_lock_resumes_own_interrupted_steal_reap() {
+  # A TERM that lands after this process renamed a dead steal owner to its own
+  # tombstone, but before it unlinked the mutex, runs the EXIT path, which
+  # re-acquires the same dead-owner lock. Its own tombstone must not wedge it.
+  local dir state lockdir rc
+  dir=$(make_case lock-own-steal-tomb)
+  state="$dir/state"
+  lockdir="$state/.contend.lock"
+  mkdir "$lockdir"
+  printf '%s\n' "$(dead_pid)" > "$lockdir/pid"
+  leave_dead_link_locks "$state" "$lockdir.steal"
+
+  rc=0
+  FM_STATE_OVERRIDE="$state" bash -c '
+    . "$1"
+    fm_current_pid me || exit 6
+    owner=$(fm_lock_link_owner "$2.steal") || exit 6
+    mv -- "$owner" "$owner.reaped.$me" || exit 7
+    fm_lock_try_acquire "$2" || exit 8
+    [ "$(cat "$2/pid" 2>/dev/null)" = "$me" ] || exit 9
+    fm_lock_release "$2"
+  ' _ "$LIB" "$lockdir" || rc=$?
+  [ "$rc" -eq 0 ] || fail "own interrupted steal reap blocked reclaiming a dead-owner lock (rc=$rc)"
+  [ ! -e "$lockdir.steal" ] && [ ! -L "$lockdir.steal" ] \
+    || fail "own interrupted steal reap left the steal mutex linked"
+  pass "a steal reap interrupted in this process is resumed from its own tombstone"
+}
+
+# Interrupt the real cleanup at its unlink, after it publishes its tombstone.
+test_lock_tombstone_tracks_reaper_start_time() (
+  local dir state lockdir owner reaper tomb i rc holder_start unrelated_start unrelated
+  sleep "$FM_TEST_STUB_MAX_BLOCK_SECONDS" &
+  unrelated=$!
+  trap 'kill "$unrelated" 2>/dev/null || true; wait "$unrelated" 2>/dev/null || true' EXIT
+  # macOS start times have one-second precision.
+  sleep 2
+  dir=$(make_case lock-reaper-pid-reuse)
+  state="$dir/state"
+  lockdir="$state/.contend.lock.steal"
+  owner="$lockdir.owner.fixture"
+  mkdir "$owner"
+  printf '%s\n' "$(dead_pid)" > "$owner/pid"
+  ln -s "$owner" "$lockdir"
+  FM_STATE_OVERRIDE="$state" bash -c '
+    . "$1"
+    lock=$2
+    ready=$3
+    release=$4
+    rm() {
+      if [ "${!#}" = "$lock" ]; then
+        : > "$ready"
+        while [ ! -e "$release" ] && kill -0 "$FM_TEST_SUITE_PID" 2>/dev/null \
+          && [ "$SECONDS" -lt "$FM_TEST_STUB_MAX_BLOCK_SECONDS" ]; do
+          sleep 0.05
+        done
+      fi
+      command rm "$@"
+    }
+    fm_lock_reap_dead_link "$lock"
+  ' _ "$LIB" "$lockdir" "$dir/reaper.ready" "$dir/release" &
+  reaper=$!
+  i=0
+  while [ "$i" -lt 100 ] && [ ! -e "$dir/reaper.ready" ]; do
+    sleep 0.05
+    i=$((i + 1))
+  done
+  [ -e "$dir/reaper.ready" ] \
+    || { kill "$reaper" 2>/dev/null || true; fail "reaper did not publish its election tombstone"; }
+  holder_start=$(start_time_of "$reaper")
+  unrelated_start=$(start_time_of "$unrelated")
+  [ -n "$holder_start" ] && [ -n "$unrelated_start" ] && [ "$holder_start" != "$unrelated_start" ] \
+    || { kill "$reaper" 2>/dev/null || true; fail "reaper and unrelated process must have distinct starts"; }
+  rc=0
+  FM_STATE_OVERRIDE="$state" bash -c '. "$1"; fm_lock_reap_dead_link "$2"' _ "$LIB" "$lockdir" || rc=$?
+  if [ "$rc" -eq 0 ] || [ ! -L "$lockdir" ]; then
+    : > "$dir/release"
+    wait "$reaper" 2>/dev/null || true
+    fail "contender cleared a genuinely live reaper's tombstone"
+  fi
+  kill -KILL "$reaper" 2>/dev/null || true
+  wait "$reaper" 2>/dev/null || true
+  tomb=
+  for tomb in "$owner".reaped.*; do [ ! -d "$tomb" ] || break; done
+  [ -d "$tomb" ] || fail "interrupted reaper left no tombstone"
+  # Model PID reuse by substituting a known unrelated live process, preserving
+  # whatever start-time identity the production election actually published.
+  mv -- "$tomb" "$owner.reaped.$unrelated${tomb#"$owner.reaped.$reaper"}"
+  FM_STATE_OVERRIDE="$state" bash -c '. "$1"; fm_lock_reap_dead_link "$2"' _ "$LIB" "$lockdir" \
+    || fail "recycled reaper pid kept an abandoned tombstone alive"
+  [ ! -L "$lockdir" ] || fail "recycled-pid cleanup left the stale link"
+  for tomb in "$owner".reaped.*; do
+    [ ! -d "$tomb" ] || fail "recycled-pid cleanup left a tombstone"
+  done
+  is_live_non_zombie "$unrelated" || fail "cleanup disturbed the unrelated live process"
+  pass "tombstone cleanup respects a live reaper and recovers a recycled reaper pid"
+)
+
+test_lock_steal_reap_cannot_remove_successor() {
+  # Two reapers verify the same dead steal owner. The competitor runs to
+  # completion exactly when the first one is about to remove the link; at most
+  # one of them may end up believing it holds the mutex.
+  local dir state steal fakebin out rc
+  dir=$(make_case lock-steal-reap-race)
+  state="$dir/state"
+  steal="$state/.contend.lock.steal"
+  fakebin="$dir/fakebin"
+  out="$dir/competitor"
+  leave_dead_link_locks "$state" "$steal"
+  # The killed fixture owner may have its PID reused during a loaded serial
+  # shard. Pin a verified-dead PID so the race exercises reaping, not liveness.
+  printf '%s\n' "$(dead_pid)" > "$steal/pid"
+  cat > "$fakebin/rm" <<'SH'
+#!/usr/bin/env bash
+last=
+for arg do last=$arg; done
+if [ "$last" = "$FM_TEST_RACE_PATH" ] && mkdir "$FM_TEST_RACE_ONCE" 2>/dev/null; then
+  bash -c '
+    . "$1"
+    if fm_lock_try_acquire_steal_mutex "$2"; then
+      printf "won %s\n" "${BASHPID:-$$}" > "$3"
+      exec sleep 30
+    fi
+    printf "lost\n" > "$3"
+  ' _ "$FM_TEST_LIB" "$last" "$FM_TEST_RACE_OUT" >/dev/null 2>&1 &
+  i=0
+  while [ "$i" -lt 100 ] && [ ! -s "$FM_TEST_RACE_OUT" ]; do
+    sleep 0.05
+    i=$((i + 1))
+  done
+fi
+exec /bin/rm "$@"
+SH
+  chmod +x "$fakebin/rm"
+
+  rc=0
+  PATH="$fakebin:$PATH" FM_TEST_LIB="$LIB" FM_TEST_RACE_PATH="$steal" \
+    FM_TEST_RACE_ONCE="$dir/race-once" FM_TEST_RACE_OUT="$out" \
+    FM_STATE_OVERRIDE="$state" bash -c '
+      . "$1"
+      fm_lock_try_acquire_steal_mutex "$2" || exit 1
+      [ "$(cat "$2/pid" 2>/dev/null)" = "${BASHPID:-$$}" ] || exit 2
+    ' _ "$LIB" "$steal" || rc=$?
+  [ -d "$dir/race-once" ] || fail "reap race hook never fired"
+  case "$(cat "$out" 2>/dev/null || true)" in
+    won\ *)
+      kill -KILL "$(sed 's/^won //' "$out")" 2>/dev/null || true
+      [ "$rc" -ne 0 ] || fail "competing reapers both hold the steal mutex"
+      ;;
+    lost)
+      [ "$rc" -eq 0 ] || fail "no reaper acquired the dead steal mutex (rc=$rc)"
+      ;;
+    *) fail "competing reaper did not report an outcome" ;;
+  esac
+  pass "a competing reaper cannot remove the successor's steal mutex"
+}
+
 test_lock_stale_steal_single_winner_under_concurrency() {
-  local dir state lockdir dead marker i pids pid wins
+  local dir state lockdir dead marker gate hold attempts i pids pid waiter winner wins ready
   dir=$(make_case lock-stale-concurrency)
   state="$dir/state"
   lockdir="$state/.contend.lock"
   marker="$dir/wins"
+  gate="$dir/first-winner"
+  hold="$dir/winner-release"
+  attempts="$dir/attempts"
   dead=$(dead_pid)
   mkdir "$lockdir"
   printf '%s\n' "$dead" > "$lockdir/pid"
   : > "$marker"
+  mkdir "$attempts"
+  # try_acquire is nonblocking: all one-shot candidates may lose to a transient
+  # steal mutex. A waiting contender guarantees eventual acquisition, and the
+  # release marker keeps winners alive until every contender has tried. Publish
+  # completed records through regular files. An interrupted FIFO open can leave
+  # its peer blocked forever, before the assertion can even run.
+  FM_STATE_OVERRIDE="$state" bash -c '
+    . "$1"
+    fm_lock_acquire_wait "$2" || exit 1
+    self=${BASHPID:-$$}
+    printf "%s\n" "$self" >> "$3"
+    printf "%s\n" "$self" > "$6/winner.$self"
+    ln "$6/winner.$self" "$4" 2>/dev/null || true
+    while [ ! -e "$5" ]; do sleep 0.05; done
+  ' _ "$LIB" "$lockdir" "$marker" "$gate" "$hold" "$attempts" &
+  waiter=$!
   pids=
   i=1
-  while [ "$i" -le 40 ]; do
+  while [ "$i" -le 39 ]; do
     FM_STATE_OVERRIDE="$state" bash -c '
       . "$1"
+      self=${BASHPID:-$$}
       if fm_lock_try_acquire "$2"; then
-        printf "%s\n" "${BASHPID:-$$}" >> "$3"
-        sleep 1
+        printf "%s\n" "$self" >> "$3"
+        printf "%s\n" "$self" > "$6/winner.$self"
+        ln "$6/winner.$self" "$4" 2>/dev/null || true
+        : > "$6/$self"
+        while [ ! -e "$5" ]; do sleep 0.05; done
+      else
+        : > "$6/$self"
       fi
-    ' _ "$LIB" "$lockdir" "$marker" &
+    ' _ "$LIB" "$lockdir" "$marker" "$gate" "$hold" "$attempts" &
     pids="$pids $!"
     i=$((i + 1))
   done
+  i=0
+  ready=0
+  while [ "$i" -lt 400 ]; do
+    ready=1
+    [ -s "$gate" ] || ready=0
+    for pid in $pids; do
+      [ -e "$attempts/$pid" ] || ready=0
+    done
+    [ "$ready" -eq 1 ] && break
+    sleep 0.1
+    i=$((i + 1))
+  done
+  if [ "$ready" -ne 1 ]; then
+    : > "$hold"
+    fail "stale-lock contenders did not publish their completed attempts"
+  fi
+  winner=$(cat "$gate")
+  [ "$winner" = "$waiter" ] || { kill "$waiter" 2>/dev/null || true; wait "$waiter" 2>/dev/null || true; }
+  wins=$(awk 'NF { c++ } END { print c + 0 }' "$marker")
+  : > "$hold"
   for pid in $pids; do
     wait "$pid" 2>/dev/null || true
   done
-  wins=$(awk 'NF { c++ } END { print c + 0 }' "$marker")
+  wait "$winner" 2>/dev/null || true
   [ "$wins" -eq 1 ] || fail "expected exactly one stale-lock stealer, got $wins"
   pass "concurrent stale-lock steal yields exactly one winner"
 }
@@ -454,6 +898,182 @@ test_lock_does_not_steal_live_lock() {
   lockpid=$(cat "$lockdir/pid" 2>/dev/null || true)
   [ "$lockpid" = "$live" ] || fail "live holder's lock pid was clobbered (got '$lockpid')"
   pass "live-held lock is not stolen"
+}
+
+start_time_of() {  # <pid>
+  FM_STATE_OVERRIDE="$TMP_ROOT" bash -c '. "$1"; fm_pid_start_time "$2"' _ "$LIB" "$1"
+}
+
+# The recorded holder died and the kernel handed its pid to an unrelated live
+# process. Pid liveness alone reads that lock as held forever, so the record's
+# holder start time must expose the reuse and let the next acquirer take it over.
+test_lock_reclaims_reused_pid_lock() {
+  local dir state lockdir owner unrelated out lockpid holder_start
+  dir=$(make_case lock-reused-pid)
+  state="$dir/state"
+  lockdir="$state/.contend.lock"
+  owner="$lockdir.owner.fixture"
+  # The original holder's start time: pid 1 started long before the process
+  # that now occupies the recorded pid, so the two can never match.
+  holder_start=$(start_time_of 1) || fail "could not read a start time for the fixture holder"
+  sleep 300 &
+  unrelated=$!
+  mkdir "$owner"
+  printf '%s\n' "$unrelated" > "$owner/pid"
+  printf '%s\n' "$holder_start" > "$owner/pid-start"
+  ln -s "$owner" "$lockdir"
+  out=$(FM_STATE_OVERRIDE="$state" bash -c '
+    . "$1"
+    if fm_lock_try_acquire "$2"; then rc=0; else rc=1; fi
+    printf "rc=%s held=%s recovered=%s self=%s\n" "$rc" "${FM_LOCK_HELD_PID:-}" \
+      "${FM_LOCK_RECOVERED_PID:-}" "${BASHPID:-$$}"
+    [ "$rc" -ne 0 ] || fm_lock_release "$2"
+  ' _ "$LIB" "$lockdir")
+  is_live_non_zombie "$unrelated" || fail "reclaiming a reused-pid lock signalled the unrelated process"
+  kill "$unrelated" 2>/dev/null || true
+  wait "$unrelated" 2>/dev/null || true
+  case "$out" in
+    *"rc=0"*) ;;
+    *) fail "lock whose live pid no longer answers to its recorded holder was refused: $out" ;;
+  esac
+  case "$out" in
+    *"recovered=$unrelated "*) ;;
+    *) fail "reused-pid takeover did not report the pid it took over: $out" ;;
+  esac
+  lockpid=$(cat "$lockdir/pid" 2>/dev/null || true)
+  [ -z "$lockpid" ] || fail "reused-pid takeover left a lock behind after release (pid '$lockpid')"
+  pass "lock whose recorded holder pid was reused by a live process is reclaimed"
+}
+
+# A holder that took the lock through the library records its start time, and
+# while it stays alive a contender still reads that record as held.
+test_lock_respects_live_holder_matching_its_start_time() {
+  local dir state lockdir holder i out recorded expected
+  dir=$(make_case lock-live-identity)
+  state="$dir/state"
+  lockdir="$state/.contend.lock"
+  FM_STATE_OVERRIDE="$state" bash -c '
+    . "$1"
+    fm_lock_try_acquire "$2" || exit 10
+    printf "ready\n" > "$3"
+    while [ ! -e "$4" ]; do sleep 0.05; done
+    fm_lock_release "$2"
+  ' _ "$LIB" "$lockdir" "$dir/holder.ready" "$dir/release-holder" &
+  holder=$!
+  i=0
+  while [ "$i" -lt 100 ] && [ ! -s "$dir/holder.ready" ]; do
+    sleep 0.05
+    i=$((i + 1))
+  done
+  [ -s "$dir/holder.ready" ] \
+    || { kill "$holder" 2>/dev/null || true; fail "identity fixture holder never acquired its lock"; }
+  recorded=$(cat "$lockdir/pid-start" 2>/dev/null || true)
+  expected=$(start_time_of "$holder" 2>/dev/null || true)
+  out=$(FM_STATE_OVERRIDE="$state" bash -c '
+    . "$1"
+    if fm_lock_try_acquire "$2"; then rc=0; fm_lock_release "$2"; else rc=1; fi
+    printf "rc=%s held=%s\n" "$rc" "${FM_LOCK_HELD_PID:-}"
+  ' _ "$LIB" "$lockdir")
+  : > "$dir/release-holder"
+  wait "$holder" || fail "identity fixture holder did not release cleanly"
+  [ -n "$expected" ] && [ "$recorded" = "$expected" ] \
+    || fail "lock record does not carry its live holder's start time (recorded '$recorded', expected '$expected')"
+  case "$out" in
+    *"rc=1 held=$holder"*) ;;
+    *) fail "lock held by a live holder matching its recorded start time was not refused: $out" ;;
+  esac
+  pass "live holder matching its recorded start time keeps its lock"
+}
+
+test_lock_reclaims_holder_whose_identity_no_longer_recomputes() {
+  # A watch lock that records a pid-identity but no start time (a watcher's
+  # claim made before start times were recorded) is held only while that
+  # identity still recomputes for its live pid. A mismatch is reclaimed
+  # without signalling the pid; a matching identity, or no recorded identity
+  # at all, still reads as live.
+  local dir state lockdir live identity out case_name recorded
+  dir=$(make_case lock-identity-mismatch)
+  state="$dir/state"
+  lockdir="$state/.watch.lock"
+  # Naming the holder under the fixture root lets the suite's cleanup reap it
+  # if an assertion below fails before the kill at the end.
+  (exec -a "$dir/holder" sleep 300) >/dev/null 2>&1 &
+  live=$!
+  identity=$(FM_STATE_OVERRIDE="$state" bash -c '. "$1"; fm_pid_identity "$2"' _ "$LIB" "$live") \
+    || fail "could not identify the fixture holder"
+  for case_name in mismatched matching unrecorded; do
+    rm -rf "$lockdir"
+    mkdir "$lockdir"
+    printf '%s\n' "$live" > "$lockdir/pid"
+    case "$case_name" in
+      mismatched) printf '%s\n' "identity no current rendering produces" > "$lockdir/pid-identity" ;;
+      matching) printf '%s\n' "$identity" > "$lockdir/pid-identity" ;;
+    esac
+    out=$(FM_STATE_OVERRIDE="$state" bash -c '
+      . "$1"
+      if fm_lock_try_acquire "$2"; then rc=0; else rc=1; fi
+      printf "rc=%s held=%s recovered=%s pid=%s\n" "$rc" "${FM_LOCK_HELD_PID:-}" "${FM_LOCK_RECOVERED_PID:-}" "$(cat "$2/pid" 2>/dev/null)"
+    ' _ "$LIB" "$lockdir")
+    is_live_non_zombie "$live" || fail "$case_name identity: the live pid was signalled"
+    recorded=$(cat "$lockdir/pid" 2>/dev/null || true)
+    case "$case_name" in
+      mismatched)
+        case "$out" in
+          *"rc=0 held= recovered=$live "*) ;;
+          *) fail "lock whose recorded identity no longer recomputes was not reclaimed: $out" ;;
+        esac
+        [ "$recorded" != "$live" ] || fail "reclaimed lock still records the mismatched pid"
+        ;;
+      *)
+        case "$out" in
+          *"rc=1 held=$live "*) ;;
+          *) fail "$case_name identity: live holder was not refused: $out" ;;
+        esac
+        [ "$recorded" = "$live" ] || fail "$case_name identity: live holder's lock pid was clobbered ('$recorded')"
+        ;;
+    esac
+  done
+  kill "$live" 2>/dev/null || true
+  wait "$live" 2>/dev/null || true
+  pass "lock whose recorded identity no longer recomputes is reclaimed without signalling its pid; a matching or unrecorded identity stays held"
+}
+
+test_lock_keeps_live_daemon_holder_with_stale_identity() {
+  # The identity check is the watcher's alone: the supervise daemon never
+  # re-checks that it still owns its lock, so reclaiming a live daemon's lock
+  # over a pre-UTC-pin local-time identity would leave two daemons running.
+  # Its lock keeps the pid-start-then-pid-liveness answer.
+  local dir state lockdir live identity legacy out recorded
+  dir=$(make_case lock-daemon-stale-identity)
+  state="$dir/state"
+  lockdir="$state/.supervise-daemon.lock"
+  # Naming the holder under the fixture root lets the suite's cleanup reap it
+  # if an assertion below fails before the kill at the end.
+  (exec -a "$dir/holder" sleep 300) >/dev/null 2>&1 &
+  live=$!
+  identity=$(FM_STATE_OVERRIDE="$state" bash -c '. "$1"; fm_pid_identity "$2"' _ "$LIB" "$live") \
+    || fail "could not identify the fixture daemon"
+  legacy=$(COLUMNS=10000 LC_ALL=C TZ=America/Los_Angeles ps -p "$live" -o lstart= -o command= 2>/dev/null | sed 's/^[[:space:]]*//')
+  [ -n "$legacy" ] && [ "$legacy" != "$identity" ] \
+    || fail "the legacy local-time identity does not differ from the current identity, so this case would pass vacuously ('$legacy')"
+  mkdir -p "$lockdir"
+  printf '%s\n' "$live" > "$lockdir/pid"
+  printf '%s\n' "$legacy" > "$lockdir/pid-identity"
+  out=$(FM_STATE_OVERRIDE="$state" bash -c '
+    . "$1"
+    if fm_lock_try_acquire "$2"; then rc=0; else rc=1; fi
+    printf "rc=%s held=%s recovered=%s\n" "$rc" "${FM_LOCK_HELD_PID:-}" "${FM_LOCK_RECOVERED_PID:-}"
+  ' _ "$LIB" "$lockdir")
+  is_live_non_zombie "$live" || fail "the live daemon pid was signalled"
+  recorded=$(cat "$lockdir/pid" 2>/dev/null || true)
+  case "$out" in
+    "rc=1 held=$live recovered=") ;;
+    *) fail "live supervise-daemon lock with a stale identity was reclaimed: $out" ;;
+  esac
+  [ "$recorded" = "$live" ] || fail "live daemon's lock pid was clobbered ('$recorded')"
+  kill "$live" 2>/dev/null || true
+  wait "$live" 2>/dev/null || true
+  pass "live supervise-daemon lock with a stale local-time identity and no start time is not reclaimed"
 }
 
 test_lock_empty_pid_uses_minimum_grace() {
@@ -644,6 +1264,38 @@ test_watcher_self_evicts_on_lock_takeover() {
   pass "watcher self-evicts when the lock pid no longer names it"
 }
 
+test_watcher_exits_on_state_teardown_during_startup() {
+  # A state directory torn down and recreated at the same path just after the
+  # watcher claimed its lock - before the main loop - is still a teardown: the
+  # empty lock in the recreated directory was never released by a successor.
+  local dir state fakebin out pid end stopped rc
+  dir=$(make_case startup-teardown)
+  state="$dir/state"
+  fakebin="$dir/fakebin"
+  out="$dir/watch.out"
+  PATH="$fakebin:$PATH" FM_HOME="$dir" FM_STATE_OVERRIDE="$state" FM_GUARD_GRACE=1 FM_POLL=1 FM_SIGNAL_GRACE=1 FM_CHECK_INTERVAL=999999 FM_HEARTBEAT=999999 "$WATCH" > "$out" 2>&1 &
+  pid=$!
+  # watcher-path is written only after the claim, a few lines before the main
+  # loop, so pause the watcher the moment it appears.
+  stopped=0
+  end=$((SECONDS + 20))
+  while [ "$SECONDS" -lt "$end" ] && is_live_non_zombie "$pid"; do
+    [ -e "$state/.watch.lock/watcher-path" ] && kill -STOP "$pid" 2>/dev/null && { stopped=1; break; }
+  done
+  [ "$stopped" -eq 1 ] || fail "watcher never finished claiming its lock: $(cat "$out")"
+  rm -rf "$state"
+  mkdir -p "$state"
+  kill -CONT "$pid" 2>/dev/null || true
+  # wait_for_exit returns the watcher's own status, or TERMs a watcher that
+  # kept running in the torn-down directory.
+  rc=0
+  wait_for_exit "$pid" 100 || rc=$?
+  [ "$rc" -eq 1 ] || fail "watcher read a startup teardown as a successor's release (exit $rc): $(cat "$out")"
+  grep -q '^watcher: exiting - state directory was torn down' "$out" \
+    || fail "watcher exited without its teardown reason: $(cat "$out")"
+  pass "watcher exits 1 with its reason when its state directory is torn down and recreated during startup"
+}
+
 test_arm_self_eviction_is_loud_without_successor() {
   local dir state fakebin armout armpid watcher_pid status i
   dir=$(make_case arm-self-evict)
@@ -755,6 +1407,99 @@ test_attached_arm_signal_is_recorded_in_cycle_ledger() {
   is_live_non_zombie "$wpid" || fail "signaling an attached arm terminated the peer watcher"
   stop_seed_watcher "$wpid" "$out"
   pass "attached arm signals record a classified lifecycle entry"
+}
+
+test_arm_term_during_steal_waits_for_watcher_cleanup_trap() {
+  local dir state fakebin armout armpid i dead pidfile status
+  dir=$(make_case arm-term-mid-steal)
+  state="$dir/state"
+  fakebin="$dir/fakebin"
+  armout="$dir/arm.out"
+  pidfile="$dir/arm.pid"
+  mkdir "$state/.watch.lock"
+  dead=$(dead_pid)
+  printf '%s\n' "$dead" > "$state/.watch.lock/pid"
+  mkdir -p "$fakebin"
+  cat > "$fakebin/ln" <<'SH'
+#!/usr/bin/env bash
+last=
+for arg do last=$arg; done
+case "$last" in
+  *.watch.lock.steal)
+    sleep 0.2
+    arm_pid=$(cat "$FM_TEST_ARM_PID_FILE" 2>/dev/null || true)
+    [ -n "$arm_pid" ] && kill -TERM "$arm_pid" 2>/dev/null || true
+    ;;
+esac
+exec /bin/ln "$@"
+SH
+  chmod +x "$fakebin/ln"
+  PATH="$fakebin:$PATH" FM_HOME="$dir" FM_STATE_OVERRIDE="$state" \
+    FM_TEST_ARM_PID_FILE="$pidfile" FM_POLL=5 FM_SIGNAL_GRACE=1 \
+    FM_CHECK_INTERVAL=999999 FM_HEARTBEAT=999999 "$WATCH_ARM" > "$armout" 2>&1 &
+  armpid=$!
+  printf '%s\n' "$armpid" > "$pidfile"
+  i=0
+  while [ "$i" -lt 100 ] && is_live_non_zombie "$armpid"; do
+    [ -e "$state/.watch.lock.steal" ] && break
+    sleep 0.02
+    i=$((i + 1))
+  done
+  status=0
+  wait_for_exit "$armpid" 150 || status=$?
+  [ "$status" -eq 143 ] || fail "arm did not finish with TERM after stale-lock recovery (status $status)"
+  [ ! -e "$state/.watch.lock.steal" ] && [ ! -L "$state/.watch.lock.steal" ] \
+    || fail "TERM during startup left the steal marker behind"
+  pass "arm defers TERM until startup watcher can run its lock cleanup"
+}
+
+test_arm_term_bounds_wait_for_stalled_startup() {
+  local dir state fakebin armout pidfile release armpid i status
+  dir=$(make_case arm-term-stalled-startup)
+  state="$dir/state"
+  fakebin="$dir/fakebin"
+  armout="$dir/arm.out"
+  pidfile="$dir/arm.pid"
+  release="$dir/release"
+  cat > "$fakebin/ln" <<'SH'
+#!/usr/bin/env bash
+last=
+for arg do last=$arg; done
+case "$last" in
+  */.watch.lock)
+    i=0
+    while [ "$i" -lt 100 ] && [ ! -s "$FM_TEST_ARM_PID_FILE" ]; do
+      sleep 0.02
+      i=$((i + 1))
+    done
+    kill -TERM "$(cat "$FM_TEST_ARM_PID_FILE")" 2>/dev/null || true
+    while [ ! -e "$FM_TEST_RELEASE" ]; do sleep 0.05; done
+    ;;
+esac
+exec /bin/ln "$@"
+SH
+  chmod +x "$fakebin/ln"
+  PATH="$fakebin:$PATH" FM_HOME="$dir" FM_STATE_OVERRIDE="$state" \
+    FM_TEST_ARM_PID_FILE="$pidfile" FM_TEST_RELEASE="$release" \
+    FM_ARM_CONFIRM_TIMEOUT=2 FM_POLL=5 FM_SIGNAL_GRACE=1 \
+    FM_CHECK_INTERVAL=999999 FM_HEARTBEAT=999999 "$WATCH_ARM" > "$armout" 2>&1 &
+  armpid=$!
+  printf '%s\n' "$armpid" > "$pidfile"
+  i=0
+  while [ "$i" -lt 100 ] && is_live_non_zombie "$armpid"; do
+    sleep 0.1
+    i=$((i + 1))
+  done
+  if is_live_non_zombie "$armpid"; then
+    : > "$release"
+    wait_for_exit "$armpid" 50 >/dev/null 2>&1 || true
+    fail "arm TERM waited past the confirmation deadline for a stalled startup"
+  fi
+  : > "$release"
+  status=0
+  wait "$armpid" 2>/dev/null || status=$?
+  [ "$status" -eq 143 ] || fail "arm did not finish with TERM after a stalled startup (status $status)"
+  pass "arm TERM stops a startup watcher that never becomes cleanup-ready"
 }
 
 test_arm_starts_and_self_heals() {
@@ -1248,6 +1993,7 @@ test_msys_pid_identity_uses_proc() {
   pass "MSYS process identity uses compatible /proc fields"
 }
 
+test_lock_tombstone_tracks_reaper_start_time || exit 1
 test_wait_deadline_reaps_a_stopped_child
 test_singleton_start
 test_pid_identity_is_locale_invariant
@@ -1258,23 +2004,37 @@ test_stale_watch_lock_reclaimed
 test_stale_watch_reclaim_publishes_before_clear
 test_live_stale_watch_lock_is_actionable
 test_live_stalled_watch_lock_is_replaced_past_hard_bound
+test_watch_replaces_live_holder_with_legacy_local_time_identity
+test_watch_replaced_holder_stands_down_after_successor_exits
 test_guard_warnings
 test_lock_single_winner_under_concurrency
 test_lock_steals_dead_pid_lock
 test_lock_stale_steal_single_winner_under_concurrency
+test_lock_reclaims_dead_steal_owner_without_nested_markers
+test_lock_recovers_dead_nested_steal_chain
+test_lock_steal_reap_cannot_remove_successor
+test_lock_reclaims_self_held_steal_mutex
+test_lock_resumes_own_interrupted_steal_reap
 test_lock_live_steal_mutex_is_not_reclaimed
 test_lock_does_not_steal_live_lock
+test_lock_reclaims_reused_pid_lock
+test_lock_respects_live_holder_matching_its_start_time
+test_lock_reclaims_holder_whose_identity_no_longer_recomputes
+test_lock_keeps_live_daemon_holder_with_stale_identity
 test_lock_empty_pid_uses_minimum_grace
 test_lock_late_claim_loses_after_recreate
 test_lock_paused_mid_acquire_claim_fails_during_steal
 test_watch_restart_rejects_reused_pid
 test_watch_restart_attaches_to_healthy_peer
 test_watcher_self_evicts_on_lock_takeover
+test_watcher_exits_on_state_teardown_during_startup
 test_arm_self_eviction_is_loud_without_successor
 test_arm_attaches_and_waits_for_live_fresh_watcher
 test_attached_arm_signal_is_recorded_in_cycle_ledger
 test_arm_starts_and_self_heals
 test_arm_hup_cleans_child_and_temp_output
+test_arm_term_during_steal_waits_for_watcher_cleanup_trap
+test_arm_term_bounds_wait_for_stalled_startup
 test_arm_propagates_immediate_wake_before_confirmation
 test_arm_waits_for_peer_beacon_after_child_stands_down
 test_arm_fails_loud_when_no_fresh_watcher_confirmable
