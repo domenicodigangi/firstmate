@@ -71,6 +71,13 @@ A Claude task worker's launch brief and Firstmate steering-inbox messages arrive
 A `--secondmate` launch omits the statement because a secondmate operates under its own supervisor contract instead of a task worker's.
 On the t3code backend, follow the [per-directory worker-channel contract](../../../../../docs/t3code-backend.md#per-directory-harness-environment).
 
+## Session name
+
+Every Claude launch receives the same printable launch-brief doorbell as its first message, and Claude Code titles an unnamed session after that message, so unnamed workers are indistinguishable in a session list.
+`launch_template()` in `../../../../../bin/fm-spawn.sh` passes `--name <task id>` on every Claude launch, task worker and secondmate alike.
+Claude Code shows the name in the `/resume` picker, the terminal title, and the composer's top rule; `../../../../../bin/fm-composer-lib.sh` reads that titled rule as a composer rule.
+The doorbell text stays constant because it is the verified channel, not a label.
+
 ## Skill listing budget
 
 Claude Code lists every skill name but keeps descriptions only within a budget of 1% of the model's context window, and on overflow it drops descriptions from the least-invoked skills first ([skills](https://code.claude.com/docs/en/skills#skill-descriptions-are-cut-short), read 2026-10-19).
