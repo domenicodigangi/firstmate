@@ -1,0 +1,10 @@
+ok - a claude launch publishes the brief as an operational-inbox record and passes only the doorbell
+ok - codex receives --model and model_reasoning_effort profile flags
+ok - grok receives --model and --reasoning-effort profile flags
+ok - cursor receives its model-qualified reasoning class and exact task workspace
+ok - absent config/claude-permission-mode defaults to --dangerously-skip-permissions
+ok - a claude task launch establishes only Firstmate's task control channels through the system prompt
+ok - a claude task launch names its session after the task id
+ok - a claude secondmate launch names its session after its id
+ok - fm-spawn: a Claude launch longer than 1024 bytes is delivered intact through the staging path
+# all fm-spawn-dispatch-profile tests passed

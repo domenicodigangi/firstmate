@@ -1,0 +1,10 @@
+fm-lab8843474cb3d8-mate idle composer -> empty
+fm-lab8843474cb3d8-worker idle composer -> empty
+fm-lab8843474cb3d8-worker after typing (no Enter) -> pending
+--- composer region with draft:
+─────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────── lab8843474cb3d8-worker ─
+❯ draft text not sent
+────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────
+  [Sonnet 5.5] 6% context | notes | 7d 19% (resets Sun 04:00) | Fable 7d 12%
+  ⏵⏵ auto mode on (shift+tab to cycle)
+fm-lab8843474cb3d8-worker after clearing -> empty

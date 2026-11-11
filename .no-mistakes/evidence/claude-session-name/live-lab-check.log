@@ -1,0 +1,9 @@
+ok primary: claude pid 145294 in /tmp/fmlab-sessname-133728/home
+ok probe: the primary answered LABREADY-8843474cb3d8
+ok trust: /tmp/fmlab-sessname-133728/home is trusted in the Claude store
+ok mirror: verified writer, check passed, captain=1 main=3
+ok host: supervision host pid 183476
+ok watcher: live watcher with a fresh beacon
+ok mate: lab8843474cb3d8-mate pid 136464 in /tmp/fmlab-sessname-133728/mate
+ok worker: lab8843474cb3d8-worker parked on /tmp/fmlab-sessname-133728/home/data/lab8843474cb3d8-worker/gate
+fail treehouse: new ~/.treehouse entries: update-check.json

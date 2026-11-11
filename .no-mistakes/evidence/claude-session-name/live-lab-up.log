@@ -1,0 +1,15 @@
+lab: /tmp/fmlab-sessname-133728 (tear down with: bin/fm-live-lab.sh down /tmp/fmlab-sessname-133728)
+tree: 6a62e0f8e5b8d25af5f65ea10e8ab667e4df227d from /home/ddg/.no-mistakes/worktrees/67bf63ea0b24/01M75Z0G4JX3GE0THHVA2TANDQ
+scaffolded: /tmp/fmlab-sessname-133728/home/data/lab8843474cb3d8-mate/brief.md (secondmate charter)
+home=/tmp/fmlab-sessname-133728/mate
+spawned lab8843474cb3d8-mate harness=claude kind=secondmate mode=secondmate yolo=off window=firstmate:fm-lab8843474cb3d8-mate worktree=/tmp/fmlab-sessname-133728/mate
+●━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+●  WATCHER DOWN - SUPERVISION IS OFF
+●  1 task(s) in flight, but no watcher has a fresh beacon (last beat: never, grace 300s).
+●  Trust the emitted supervision protocol for this harness; do not use shell & for watcher repair.
+●  This is a supervision warning only; the guarded operation WILL still run.
+●  repair missing watcher supervision according to the session-start block for this harness; do not use shell &.
+●━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+spawned lab8843474cb3d8-worker harness=claude kind=ship mode=local-only yolo=on window=firstmate:fm-lab8843474cb3d8-worker worktree=/tmp/fmlab-sessname-133728/treehouse/.treehouse/notes-09db36/1/notes
+gate: /tmp/fmlab-sessname-133728/home/data/lab8843474cb3d8-worker/gate (touch, then message the worker to resume)
+primary: claude --setting-sources project,local --model sonnet --effort medium --permission-mode auto

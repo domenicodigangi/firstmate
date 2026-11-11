@@ -1,0 +1,11 @@
+# lab tmux windows: name | pane_title (terminal title set by Claude Code)
+firstmate:lab | t440p
+firstmate:fm-lab8843474cb3d8-mate | ✳ lab8843474cb3d8-mate
+firstmate:fm-lab8843474cb3d8-worker | ✳ lab8843474cb3d8-worker
+firstmate:main | ✳ Fm-live-lab.sh readiness probe
+
+# claude process argv per worker pane (--name value)
+fm-lab8843474cb3d8-mate: --name lab8843474cb3d8-mate
+main: (no --name)
+pid 136464: --name lab8843474cb3d8-mate  doorbell: : Firstmate operational input waiting: read
+pid 142415: --name lab8843474cb3d8-worker  doorbell: : Firstmate operational input waiting: read

@@ -1,0 +1,7 @@
+== claude spawn_exit=0 contains_--name=yes
+--name 'adv-claude-z9'
+': Firstmate operational input waiting: read '\''<record>
+== codex spawn_exit=0 contains_--name=no
+== grok spawn_exit=0 contains_--name=no
+== opencode spawn_exit=0 contains_--name=no
+== cursor spawn_exit=0 contains_--name=no
