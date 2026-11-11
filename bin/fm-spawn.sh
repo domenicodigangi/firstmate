@@ -509,6 +509,8 @@
 #     __CLAUDESETTINGS__ the single claude --settings value: a quoted inline
 #                  JSON object for a crewmate or scout, or a quoted path to
 #                  state/<task-id>.claude-settings.json for a secondmate
+#     __CLAUDENAME__ the quoted task id, passed as claude --name so each
+#                  launched session carries its own display name
 #     __PIBIN__    quoted concrete Pi-family executable path resolved from PATH
 #     __PITUIMODE__ optional --tui-mode regular when that executable advertises it
 #     __PIAPPROVE__ optional --approve on a seeded Pi/pi-signed secondmate when
@@ -2734,7 +2736,14 @@ launch_template() {
     # record-backed doorbell: the full envelope is published into the receiving
     # home's state/operational-inbox before launch and only a printable doorbell
     # naming it is passed. A record that cannot be published stops the spawn.
-    printf '%s' '__MODELFLAG____EFFORTFLAG____BRIEFDOORBELL__'
+    # Every Claude launch receives the same printable doorbell as its first
+    # message, and Claude Code titles an unnamed session after that message, so
+    # without a name every worker reads "Firstmate operational input waiting"
+    # in a session list. --name __CLAUDENAME__ gives the session its task id
+    # (shown in the /resume picker, the terminal title, and the composer's top
+    # rule, which bin/fm-composer-lib.sh already reads as a titled rule). The
+    # doorbell text itself stays constant: it is the verified channel.
+    printf '%s' '__MODELFLAG____EFFORTFLAG__--name __CLAUDENAME__ __BRIEFDOORBELL__'
     ;;
   # --disable hooks (equivalent to -c features.hooks=false) requests that codex
   # turn its whole lifecycle-hook layer off for CREWMATE and SCOUT launches only.
@@ -7100,6 +7109,7 @@ if [ "$RELAUNCH" -eq 1 ]; then
 fi
 LAUNCH=${LAUNCH//__PIRESUME__/$RESUME_ARGS}
 LAUNCH=${LAUNCH//__CLAUDEPERMFLAG__/$CLAUDE_PERM_FLAG}
+LAUNCH=${LAUNCH//__CLAUDENAME__/$(shell_quote "$ID")}
 case "$LAUNCH" in
 *__CLAUDESETTINGS__*)
   if [ "$KIND" = secondmate ]; then
