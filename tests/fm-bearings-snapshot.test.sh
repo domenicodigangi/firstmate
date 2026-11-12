@@ -3096,18 +3096,42 @@ SH
 }
 
 test_large_local_snapshot_overlaps_local_reads_without_projection_drift() {
-  local home fakebin worktree serial parallel parallel_file snapshot_pid i
-  local serial_started serial_elapsed parallel_started parallel_elapsed saved
+  local home fakebin worktree serial parallel i serial_reads parallel_reads
   home=$(make_home large-local-snapshot)
   worktree="$home/projects/shared-worktree"
   fm_git_init_commit "$worktree"
   git -C "$worktree" checkout -qb fm/synthetic-large-local
   fakebin=$(make_fakebin "$home")
+  # Each current-state read registers itself as in flight, and records an
+  # overlap whenever it sees another read in flight at the same time. With
+  # FAKE_NM_AWAIT_PEER=1 a read waits, bounded, until some overlap has been
+  # recorded, so an overlapping implementation proves overlap however slowly
+  # the host schedules the reads, while a serialized one records none.
   cat > "$fakebin/no-mistakes" <<'SH'
 #!/usr/bin/env bash
-if [ "$*" = "axi status" ] && [ "${FAKE_NM_DELAY:-0}" = 1 ]; then
-  [ -z "${FAKE_NM_SIGNAL:-}" ] || : > "$FAKE_NM_SIGNAL"
-  sleep 1
+if [ "$*" = "axi status" ] && [ -n "${FAKE_NM_ACTIVE_DIR:-}" ]; then
+  dir=$FAKE_NM_ACTIVE_DIR
+  : > "$dir/began.$$"
+  : > "$dir/active.$$"
+  trap 'rm -f "$dir/active.$$"' EXIT
+  saw_peer() {
+    set -- "$dir"/active.*
+    [ "$#" -ge 2 ]
+  }
+  if [ "${FAKE_NM_AWAIT_PEER:-0}" = 1 ]; then
+    i=0
+    until saw_peer || [ -e "$dir/overlap" ] || [ -e "$dir/peer-timeout" ]; do
+      if [ "$i" -ge 600 ]; then
+        : > "$dir/peer-timeout"
+        break
+      fi
+      sleep 0.05
+      i=$((i + 1))
+    done
+  else
+    sleep 0.2
+  fi
+  if saw_peer; then : > "$dir/overlap"; fi
 fi
 exit 0
 SH
@@ -3136,44 +3160,35 @@ SH
     i=$((i + 1))
   done
 
-  serial=$(FAKE_NM_DELAY=0 FM_SNAPSHOT_LOCAL_READ_CONCURRENCY=1 run "$home" "$fakebin" --json)
+  serial=$(FM_SNAPSHOT_LOCAL_READ_CONCURRENCY=1 run "$home" "$fakebin" --json)
 
-  # Serialized reads pay every worker's delay end to end while concurrent reads
-  # overlap them. Time both runs and compare, because the two pay the same
-  # composition overhead: the difference isolates the overlap this change
-  # delivers, where an absolute wall-clock budget would instead measure how
-  # loaded the host happens to be and flake on a busy runner.
-  serial_started=$(date +%s)
-  FAKE_NM_DELAY=1 FM_SNAPSHOT_LOCAL_READ_CONCURRENCY=1 \
+  # Prove overlap structurally rather than by wall clock: a timing comparison
+  # measures how loaded the host is and flaked on CI runners, where a busy
+  # concurrent run took longer than the serialized one. The serialized run is
+  # the control: it must perform every read and never overlap two of them.
+  serial_reads="$home/serial-reads"
+  mkdir -p "$serial_reads"
+  FAKE_NM_ACTIVE_DIR="$serial_reads" FM_SNAPSHOT_LOCAL_READ_CONCURRENCY=1 \
     run "$home" "$fakebin" --json >/dev/null \
     || fail "serialized local snapshot failed"
-  serial_elapsed=$(( $(date +%s) - serial_started ))
+  set -- "$serial_reads"/began.*
+  [ -e "$1" ] || fail "serialized local snapshot never began a current-state read"
+  [ ! -e "$serial_reads/overlap" ] \
+    || fail "serialized local snapshot overlapped current-state reads"
 
-  parallel_started=$(date +%s)
-  parallel_file="$home/parallel-snapshot.json"
-  FAKE_NM_DELAY=1 FAKE_NM_SIGNAL="$home/nm-started" \
-    FM_SNAPSHOT_LOCAL_READ_CONCURRENCY=8 \
-    run "$home" "$fakebin" --json > "$parallel_file" &
-  snapshot_pid=$!
-  i=0
-  while [ ! -e "$home/nm-started" ] && [ "$i" -lt 100 ]; do
-    sleep 0.05
-    i=$((i + 1))
-  done
-  if [ ! -e "$home/nm-started" ]; then
-    kill "$snapshot_pid" 2>/dev/null || true
-    wait "$snapshot_pid" 2>/dev/null || true
-    fail "concurrent local snapshot never began a current-state read"
-  fi
-  wait "$snapshot_pid" || fail "concurrent local snapshot failed"
-  parallel=$(<"$parallel_file")
-  parallel_elapsed=$(( $(date +%s) - parallel_started ))
-  # Five one-second reads serialize into five seconds and overlap into about
-  # one, so at least two of those four seconds must show up as real savings.
-  # Serializing the reads again collapses that difference to roughly zero.
-  saved=$(( serial_elapsed - parallel_elapsed ))
-  [ "$saved" -ge 2 ] \
-    || fail "concurrent local reads saved no measurable time (serial ${serial_elapsed}s vs concurrent ${parallel_elapsed}s)"
+  parallel_reads="$home/parallel-reads"
+  mkdir -p "$parallel_reads"
+  # Both read bounds sit above the fake's 30-second peer wait so a slow host
+  # cannot turn a waiting read into an unknown state.
+  parallel=$(FAKE_NM_ACTIVE_DIR="$parallel_reads" FAKE_NM_AWAIT_PEER=1 \
+    FM_SNAPSHOT_LOCAL_READ_CONCURRENCY=8 FM_SNAPSHOT_CREW_STATE_TIMEOUT=60 \
+    FM_CREW_STATE_NM_TIMEOUT=60 \
+    run "$home" "$fakebin" --json) \
+    || fail "concurrent local snapshot failed"
+  set -- "$parallel_reads"/began.*
+  [ -e "$1" ] || fail "concurrent local snapshot never began a current-state read"
+  [ -e "$parallel_reads/overlap" ] \
+    || fail "concurrent local snapshot never had two current-state reads in flight at once"
   [ "$parallel" = "$serial" ] \
     || fail "concurrent local observation changed the fm-bearings.v1 projection"
   printf '%s' "$parallel" | jq -e '

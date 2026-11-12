@@ -1531,6 +1531,7 @@ test_pi_exclude_tools_reach_ship_and_scout_launches() {
 test_pi_exclude_tools_worker_registry_reports() {
   local harness kindflag scenario case_name rec id out status report
   command -v node >/dev/null 2>&1 || fail "node is required to drive Pi worker exclusion reporting"
+  fm_node_ts_gate "Pi worker exclusion registry reports" || return 0
   for harness in pi pi-signed; do
     for kindflag in --ship --scout; do
       for scenario in matched unmatched unverified; do

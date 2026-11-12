@@ -490,8 +490,22 @@ test_relaunch_preserves_durable_task_metadata() {
   pass "fm-control relaunch: durable task metadata survives replacement launch publication"
 }
 
+# await_marker <path> <pid>: wait until <path> exists while <pid> is alive.
+# A relaunch on a loaded host can take far longer than a fixed few seconds to
+# reach a fixture barrier, so the bound is the process's own liveness, capped
+# at 120 seconds; one final check covers a marker published as the pid exits.
+await_marker() {
+  local path=$1 pid=$2 i=0
+  while [ ! -e "$path" ] && [ "$i" -lt 12000 ]; do
+    kill -0 "$pid" 2>/dev/null || break
+    /bin/sleep 0.01
+    i=$((i + 1))
+  done
+  [ -e "$path" ]
+}
+
 test_relaunch_serializes_concurrent_durable_metadata_publication() {
-  local dir control_pid link_pid rc i=0 traceparent prepare launch_release waiting ready release
+  local dir control_pid link_pid rc traceparent prepare launch_release waiting ready release
   dir=$(new_case metadata-race rl28)
   add_ship_task "$dir" rl28 claude
   printf '%s\n' "$$" > "$dir/home/state/.lock"
@@ -507,11 +521,7 @@ test_relaunch_serializes_concurrent_durable_metadata_publication() {
     FM_FAKE_TRACE_RELEASE="$launch_release" \
     run_control "$dir" rl28 relaunch --note "continue after publication" > "$dir/control.out" &
   control_pid=$!
-  while [ ! -e "$prepare" ] && [ "$i" -lt 500 ]; do
-    /bin/sleep 0.01
-    i=$((i + 1))
-  done
-  [ -e "$prepare" ] || {
+  await_marker "$prepare" "$control_pid" || {
     kill "$control_pid" 2>/dev/null || true
     wait "$control_pid" 2>/dev/null || true
     fail "relaunch did not reach trace delivery"
@@ -525,11 +535,7 @@ test_relaunch_serializes_concurrent_durable_metadata_publication() {
     "$X_LINK" rl28 request-28 --carry-count 1 --carry-ts 1700000000 \
       --carry-platform x --carry-max 280 > "$dir/link.out" 2>&1 &
   link_pid=$!
-  i=0
-  while [ ! -e "$waiting" ] && [ "$i" -lt 500 ]; do
-    /bin/sleep 0.01
-    i=$((i + 1))
-  done
+  await_marker "$waiting" "$link_pid" || true
   [ -e "$waiting" ] && [ ! -e "$ready" ] || {
     : > "$launch_release"
     : > "$release"
@@ -538,12 +544,7 @@ test_relaunch_serializes_concurrent_durable_metadata_publication() {
     fail "a durable metadata writer was not blocked during relaunch delivery"
   }
   : > "$launch_release"
-  i=0
-  while [ ! -e "$ready" ] && [ "$i" -lt 500 ]; do
-    /bin/sleep 0.01
-    i=$((i + 1))
-  done
-  [ -e "$ready" ] || {
+  await_marker "$ready" "$link_pid" || {
     kill "$link_pid" "$control_pid" 2>/dev/null || true
     wait "$link_pid" 2>/dev/null || true
     wait "$control_pid" 2>/dev/null || true
@@ -1808,7 +1809,7 @@ test_launch_failure_keeps_the_prior_record_and_reports_it() {
 }
 
 test_prepublication_failure_keeps_concurrent_durable_metadata() {
-  local dir control_pid link_out rc i=0
+  local dir control_pid link_out rc
   dir=$(new_case rollback-race rl30)
   add_ship_task "$dir" rl30 claude
   printf '%s' "$dir/proj" > "$dir/fake/cwd"
@@ -1816,11 +1817,7 @@ test_prepublication_failure_keeps_concurrent_durable_metadata() {
     run_control "$dir" rl30 relaunch --harness codex --note "preserve concurrent metadata" \
       > "$dir/control.out" &
   control_pid=$!
-  while [ ! -e "$dir/cwd-race-ready" ] && [ "$i" -lt 200 ]; do
-    /bin/sleep 0.01
-    i=$((i + 1))
-  done
-  [ -e "$dir/cwd-race-ready" ] || {
+  await_marker "$dir/cwd-race-ready" "$control_pid" || {
     kill "$control_pid" 2>/dev/null || true
     wait "$control_pid" 2>/dev/null || true
     fail "relaunch did not reach its pre-publication endpoint check"
