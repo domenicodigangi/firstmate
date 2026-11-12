@@ -4,7 +4,7 @@
 #
 # Usage:
 #   fm-primary-watchdog.sh record [--pid <harness-pid>]
-#   fm-primary-watchdog.sh check [--dry-run]
+#   fm-primary-watchdog.sh check
 #
 # `record` runs inside the primary at the end of every locked full session start
 # (bin/fm-session-start.sh). It writes state/.primary-endpoint: the primary's
@@ -23,8 +23,12 @@
 #   stalled   a live harness holds the lock, the oldest unacknowledged inbox
 #             note (bin/fm-inbox.sh receipts) is older than the note threshold,
 #             AND the primary's last turn activity is older than that threshold.
-#             Turn activity is the newest of state/.claude-autoarm-epoch (every
-#             Claude primary turn end), state/inbox/handled (every note
+#             Turn activity is the newest of the primary harness's own Claude
+#             session transcript, which grows during a turn
+#             ($HOME/.claude/projects/<recorded cwd with every / and . as ->/
+#             <state/.lock-session id>.jsonl, or the newest *.jsonl there when
+#             no id is recorded), state/.claude-autoarm-epoch (every Claude
+#             primary turn end), state/inbox/handled (every note
 #             acknowledgement), and state/.session-start-complete.
 #   alive     neither; a note waiting behind recent activity is a slow answer.
 #   uncertain the lock state cannot be classified; nothing is done.
@@ -36,8 +40,9 @@
 #   - a dead primary waits FM_PRIMARY_WATCHDOG_DEAD_GRACE_SECS, then gets at
 #     most ONE restart attempt, and none while a previous restart is inside
 #     FM_PRIMARY_WATCHDOG_COOLDOWN_SECS (state/.primary-watchdog-last-restart);
-#   - a stalled primary is never restarted: its harness still runs and the
-#     watchdog never kills a live session, so a stall alerts instead;
+#   - a stalled primary is never restarted, only alerted: its session still
+#     runs, the owner may have stopped firstmate there on purpose, and a
+#     restart would override that; only an ended session is restarted;
 #   - a failed, refused, cooled-down, or unverified restart alerts ONCE, and a
 #     restart that verified but did not keep the primary up alerts once too.
 # A verdict that changes kind (stalled to dead) opens a new episode.
@@ -57,9 +62,8 @@
 # (bin/fm-alert-channel-lib.sh; docs/wedge-alarm.md owns the directives) and
 # always leave the summary in state/.primary-watchdog-alert. No other service.
 #
-# `check --dry-run` prints the verdict and the action it would take, and
-# changes nothing. Overlapping runs are skipped through the
-# state/.primary-watchdog.lock directory.
+# Overlapping runs are skipped through the state/.primary-watchdog.lock
+# directory.
 #
 # Environment:
 #   FM_HOME                              operational home (default: code root)
@@ -200,6 +204,22 @@ cmd_record() {
 
 # ---------------------------------------------------------------- check
 
+# The primary's own Claude session transcript: the recorded session's file, or
+# every transcript for the recorded cwd when no session id is recorded.
+primary_transcripts() {
+  local cwd dir id
+  cwd=$(field "$ENDPOINT" cwd)
+  [ -n "$cwd" ] && [ -n "${HOME:-}" ] || return 0
+  cwd=${cwd//\//-}
+  dir="$HOME/.claude/projects/${cwd//./-}"
+  [ -d "$dir" ] || return 0
+  if id=$(fm_session_lock_recorded_session_id "$STATE"); then
+    printf '%s\n' "$dir/$id.jsonl"
+  else
+    printf '%s\n' "$dir"/*.jsonl
+  fi
+}
+
 # Sets LOCK_STATE, LOCK_PID, OLDEST_NOTE_AGE (empty when none), ACTIVITY_AGE.
 observe() {  # <now>
   local now=$1 ready receipts oldest m newest=0 path
@@ -234,11 +254,12 @@ if ages:
 ' 2>/dev/null || true)
   OLDEST_NOTE_AGE=
   [ -z "$oldest" ] || OLDEST_NOTE_AGE=$((now - oldest))
-  for path in "$STATE/.claude-autoarm-epoch" "$STATE/inbox/handled" "$STATE/.session-start-complete"; do
+  while IFS= read -r path; do
     m=$(mtime "$path")
     [ -n "$m" ] || continue
     [ "$m" -le "$newest" ] || newest=$m
-  done
+  done < <(primary_transcripts
+    printf '%s\n' "$STATE/.claude-autoarm-epoch" "$STATE/inbox/handled" "$STATE/.session-start-complete")
   ACTIVITY_AGE=$((now - newest))
 }
 
@@ -266,6 +287,10 @@ alert() {  # <summary>
   printf '%s %s\n' "$(date -u +%Y-%m-%dT%H:%M:%SZ)" "$summary" > "$ALERT_MARKER.tmp" \
     && mv -f "$ALERT_MARKER.tmp" "$ALERT_MARKER"
   WEDGE_ALARM_TITLE="firstmate stopped"
+  # shellcheck source=bin/fm-supervisor-target-lib.sh
+  . "$SELF_DIR/fm-supervisor-target-lib.sh"
+  # shellcheck source=bin/fm-backend.sh
+  . "$SELF_DIR/fm-backend.sh"
   # shellcheck source=bin/fm-alert-channel-lib.sh
   . "$SELF_DIR/fm-alert-channel-lib.sh"
   wedge_alarm_notify "$summary" "$ALERT_MARKER" || true
@@ -354,22 +379,15 @@ acquire_run_lock() {
 }
 
 cmd_check() {
-  local dry=0 now since reason restart_at result alerted last summary detail
-  while [ "$#" -gt 0 ]; do
-    case "$1" in
-      --dry-run) dry=1; shift ;;
-      *) die "usage: fm-primary-watchdog.sh check [--dry-run]" ;;
-    esac
-  done
+  local now since reason restart_at result alerted last summary detail
+  [ "$#" -eq 0 ] || die "usage: fm-primary-watchdog.sh check"
   if fm_root_is_secondmate_home "$FM_HOME"; then
     say skipped none "secondmate homes are recovered by their parent"
     return 0
   fi
   [ -d "$STATE" ] || { say uncertain none "no state directory at $STATE"; return 0; }
-  if [ "$dry" -eq 0 ]; then
-    acquire_run_lock || { say uncertain none "another watchdog run is in progress"; return 0; }
-    trap 'rmdir "$RUN_LOCK" 2>/dev/null || true' EXIT
-  fi
+  acquire_run_lock || { say uncertain none "another watchdog run is in progress"; return 0; }
+  trap 'rmdir "$RUN_LOCK" 2>/dev/null || true' EXIT
   now=$(date +%s)
   observe "$now"
   classify
@@ -378,7 +396,7 @@ cmd_check() {
   case "$VERDICT" in
     alive)
       if [ -f "$EPISODE" ]; then
-        [ "$dry" -eq 1 ] || rm -f "$EPISODE"
+        rm -f "$EPISODE"
         say alive recovered "$detail"
       else
         say alive none "$detail"
@@ -393,7 +411,7 @@ cmd_check() {
   if [ "$reason" != "$VERDICT" ] || [ -z "$since" ]; then
     since=$now
     reason=$VERDICT
-    [ "$dry" -eq 1 ] || write_record "$EPISODE" "since=$since" "reason=$reason"
+    write_record "$EPISODE" "since=$since" "reason=$reason"
   fi
   restart_at=$(field "$EPISODE" restart_at)
   result=$(field "$EPISODE" restart_result)
@@ -405,7 +423,8 @@ cmd_check() {
       return 0
     fi
     summary="firstmate in $FM_HOME is still $VERDICT after a restart at $(date -u -d "@$restart_at" +%H:%MZ 2>/dev/null || printf '%s' "$restart_at") (result: $result)"
-    [ "$dry" -eq 1 ] || { alert "$summary"; write_record "$EPISODE" "since=$since" "reason=$reason" "restart_at=$restart_at" "restart_result=$result" "alerted_at=$now"; }
+    alert "$summary"
+    write_record "$EPISODE" "since=$since" "reason=$reason" "restart_at=$restart_at" "restart_result=$result" "alerted_at=$now"
     say "$VERDICT" alerted "$summary"
     return 0
   fi
@@ -424,9 +443,6 @@ cmd_check() {
     if [ "$last" -gt 0 ] && [ $((now - last)) -lt "$COOLDOWN_SECS" ]; then
       result=cooldown
       summary="firstmate in $FM_HOME went down again $(( (now - last) / 60 ))m after a restart; not restarting again within the ${COOLDOWN_SECS}s cooldown"
-    elif [ "$dry" -eq 1 ]; then
-      say dead restart "would restart the recorded primary; $detail"
-      return 0
     else
       write_record "$LAST_RESTART" "$now"
       write_record "$EPISODE" "since=$since" "reason=$reason" "restart_at=$now" "restart_result=attempting"
@@ -438,10 +454,6 @@ cmd_check() {
       result=failed
       summary="firstmate in $FM_HOME is down and the restart failed: $RESTART_DETAIL"
     fi
-  fi
-  if [ "$dry" -eq 1 ]; then
-    say "$VERDICT" alert "would alert: $summary"
-    return 0
   fi
   alert "$summary"
   write_record "$EPISODE" "since=$since" "reason=$reason" "restart_at=$now" "restart_result=$result" "alerted_at=$now"
@@ -456,5 +468,5 @@ case "${1:-}" in
   record) shift; cmd_record "$@" ;;
   check) shift; cmd_check "$@" ;;
   -h|--help|help) sed -n '2,/^set -euo/p' "$0" | sed '$d; s/^# \{0,1\}//' ;;
-  *) die "usage: fm-primary-watchdog.sh record [--pid <pid>] | check [--dry-run]" ;;
+  *) die "usage: fm-primary-watchdog.sh record [--pid <pid>] | check" ;;
 esac

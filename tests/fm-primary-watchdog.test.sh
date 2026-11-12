@@ -158,8 +158,8 @@ set_activity() {  # <home> <age-seconds>
 run_check() {  # <home> [extra args...]
   local home=$1
   shift
-  PATH="$FAKEBIN:$PATH" FM_HOME="$home" FAKE_HERDR_DIR="$home/herdr" FAKE_STATE="$home/state" \
-    FAKE_ALERT_LOG="$home/alerts" FM_WEDGE_ALARM_EXEC="$FAKEBIN/alert-recorder" \
+  PATH="$FAKEBIN:$PATH" FM_HOME="$home" HOME="$home/userhome" FAKE_HERDR_DIR="$home/herdr" FAKE_STATE="$home/state" \
+    FAKE_ALERT_LOG="$home/alerts" FM_WEDGE_ALARM_EXEC="${ALARM_EXEC-$FAKEBIN/alert-recorder}" \
     FM_PRIMARY_WATCHDOG_VERIFY_SECS="${VERIFY_SECS:-3}" \
     FM_PRIMARY_WATCHDOG_DEAD_GRACE_SECS="${DEAD_GRACE:-0}" \
     "$WATCHDOG" check "$@"
@@ -395,16 +395,53 @@ test_new_episode_after_recovery() {
   pass "recovery ends an episode so a later stop alerts again"
 }
 
-test_dry_run_changes_nothing() {
-  local home out
-  home=$(make_home dry-run)
-  write_endpoint "$home" 999999
-  touch "$home/herdr/run-starts-primary"
-  out=$(run_check "$home" --dry-run) || fail "dry run must succeed"
-  assert_contains "$out" "verdict=dead" "dry run still reports the verdict"
-  assert_equals 0 "$(run_count "$home")" "dry run never relaunches"
-  assert_absent "$home/state/.primary-watchdog" "dry run records no episode"
-  pass "check --dry-run reports without acting or recording"
+test_rex_channel_records_alert_once() {
+  local home pid out rc
+  home=$(make_home rex-channel)
+  pid=$(start_holder)
+  printf '%s\n' "$pid" > "$home/state/.lock"
+  write_endpoint "$home" "$pid"
+  write_note "$home" 1800
+  set_activity "$home" 1800
+  printf 'command:printf "%%s\\n" "$1" >> %s/alerts\nrex\n' "$home" > "$home/config/wedge-alarm"
+  out=$(unset FM_SUPERVISOR_BACKEND FM_SUPERVISOR_TARGET; ALARM_EXEC='' run_check "$home" 2>/dev/null)
+  rc=$?
+  assert_equals 0 "$rc" "a rex directive must not abort the check"
+  assert_contains "$out" "action=alerted" "the stall alerts through the configured channels"
+  assert_grep "alerted_at=" "$home/state/.primary-watchdog" "the alert is recorded for the episode"
+  assert_equals 1 "$(alert_count "$home")" "the command channel before rex fires once"
+  out=$(unset FM_SUPERVISOR_BACKEND FM_SUPERVISOR_TARGET; ALARM_EXEC='' run_check "$home" 2>/dev/null) \
+    || fail "second check must succeed"
+  assert_contains "$out" "action=quiet" "the recorded alert keeps the episode quiet"
+  assert_equals 1 "$(alert_count "$home")" "a rex directive still alerts only once"
+  pass "a rex directive in config/wedge-alarm still records the alert once"
+}
+
+test_long_turn_transcript_keeps_alive() {
+  local home pid out dir
+  home=$(make_home long-turn)
+  pid=$(start_holder)
+  printf '%s\n' "$pid" > "$home/state/.lock"
+  write_endpoint "$home" "$pid"
+  write_note "$home" 1800
+  set_activity "$home" 1800
+  dir="$home/userhome/.claude/projects/$(printf '%s' "$home" | tr '/.' '--')"
+  mkdir -p "$dir"
+  printf 'sess-1\n' > "$home/state/.lock-session"
+  printf '{}\n' > "$dir/sess-1.jsonl"
+  printf '{}\n' > "$dir/other.jsonl"
+  age_path 1800 "$dir/other.jsonl"
+  out=$(run_check "$home") || fail "check must succeed during a long turn"
+  assert_contains "$out" "verdict=alive" "a transcript still growing is turn activity"
+  assert_equals 0 "$(alert_count "$home")" "a long working turn raises no alert"
+  age_path 1800 "$dir/sess-1.jsonl"
+  fm_touch_epoch "$(date +%s)" "$dir/other.jsonl"
+  out=$(run_check "$home") || fail "check must succeed"
+  assert_contains "$out" "verdict=stalled" "another session's transcript is not the primary's activity"
+  rm -f "$home/state/.lock-session" "$home/state/.primary-watchdog"
+  out=$(run_check "$home") || fail "check must succeed without a recorded session id"
+  assert_contains "$out" "verdict=alive" "with no recorded id the newest transcript for the cwd counts"
+  pass "a long working turn whose transcript is fresh is never a stall"
 }
 
 test_secondmate_home_skipped() {
@@ -467,6 +504,7 @@ fm_test_run \
   test_missing_endpoint_alerts \
   test_cooldown_blocks_restart_loop \
   test_new_episode_after_recovery \
-  test_dry_run_changes_nothing \
+  test_rex_channel_records_alert_once \
+  test_long_turn_transcript_keeps_alive \
   test_secondmate_home_skipped \
   test_record_writes_endpoint
