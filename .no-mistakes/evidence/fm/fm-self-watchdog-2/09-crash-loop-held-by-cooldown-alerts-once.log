@@ -1,0 +1,13 @@
+# last restart stamp: 1794448107  now: 1794448174
+# primary exits again shortly after its restart
+["/bin/bash"]
+# check 1 (grace 0, default 1800s cooldown)
+primary-watchdog: 2026-11-12T01:49:43Z verdict=dead action=alerted - firstmate in /tmp/fm-lab.ZCTmDV went down again 1m after a restart; not restarting again within the 1800s cooldown
+# check 2
+primary-watchdog: 2026-11-12T01:49:44Z verdict=dead action=quiet - already alerted for this episode; lock=stale oldest-note-age=706 activity-age=8
+# pane still just a shell (no relaunch):
+["/bin/bash"]
+# alerts.log:
+01:42:40 ALERT firstmate in /tmp/fm-lab.ZCTmDV has left an inbox note unhandled for 4m with no turn activity for 1m; its session is still running, so it was not restarted
+01:45:59 ALERT firstmate in /tmp/fm-lab.ZCTmDV is down and the restart failed: the recorded pane w1:p1 is not an idle shell (other); not typing into it
+01:49:43 ALERT firstmate in /tmp/fm-lab.ZCTmDV went down again 1m after a restart; not restarting again within the 1800s cooldown

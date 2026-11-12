@@ -1,0 +1,21 @@
+# primary exits, and the pane is left running another program (sleep 900)
+[{"pid":1629236,"cmdline":"sleep 900"}]
+# check 1 (grace 0, cooldown 0)
+primary-watchdog: 2026-11-12T01:45:59Z verdict=dead action=restart-failed - firstmate in /tmp/fm-lab.ZCTmDV is down and the restart failed: the recorded pane w1:p1 is not an idle shell (other); not typing into it
+# check 2
+primary-watchdog: 2026-11-12T01:46:00Z verdict=dead action=quiet - already alerted for this episode; lock=stale oldest-note-age=482 activity-age=24
+# the blocker clears (pane is a shell again) - still the same episode
+[{"pid":1435385,"cmdline":"/bin/bash"}]
+# check 3
+primary-watchdog: 2026-11-12T01:46:03Z verdict=dead action=quiet - already alerted for this episode; lock=stale oldest-note-age=485 activity-age=27
+# episode:
+since=1794447944
+reason=dead
+restart_at=1794447944
+restart_result=failed
+alerted_at=1794447944
+# alerts.log:
+01:42:40 ALERT firstmate in /tmp/fm-lab.ZCTmDV has left an inbox note unhandled for 4m with no turn activity for 1m; its session is still running, so it was not restarted
+01:45:59 ALERT firstmate in /tmp/fm-lab.ZCTmDV is down and the restart failed: the recorded pane w1:p1 is not an idle shell (other); not typing into it
+# pane after (never typed into):
+[{"pid":1435385,"cmdline":"/bin/bash"}]

@@ -1,0 +1,26 @@
+# check while new primary is up (closes the stalled episode)
+primary-watchdog: 2026-11-12T01:44:17Z verdict=alive action=recovered - lock=held oldest-note-age=377 activity-age=18
+# primary exits (/exit) - pane falls back to its shell
+[{"pid":1435385,"cmdline":"/bin/bash"}]
+# check 1 (default 120s grace)
+primary-watchdog: 2026-11-12T01:44:25Z verdict=dead action=wait - ended 0s ago, grace 120s; lock=stale oldest-note-age=387 activity-age=6
+# check 2 (grace shortened to 5s for the lab)
+primary-watchdog: 2026-11-12T01:45:16Z verdict=dead action=restarted - relaunched in pane w1:p1
+
+real	0m44.801s
+user	0m3.995s
+sys	0m3.979s
+# episode:
+since=1794447864
+reason=dead
+restart_at=1794447871
+restart_result=ok
+# lock / session-start-complete:
+1609519
+1609519
+# pane foreground after restart:
+[{"pid":1609519,"cmdline":"claude Use the Bash tool with timeout 300000 to run: bin/fm-session-start.sh >/dev/null 2>&1 - then reply only: started"}]
+# check 3
+primary-watchdog: 2026-11-12T01:45:17Z verdict=alive action=recovered - lock=held oldest-note-age=439 activity-age=0
+# alerts.log (should still hold only the earlier stall alert):
+01:42:40 ALERT firstmate in /tmp/fm-lab.ZCTmDV has left an inbox note unhandled for 4m with no turn activity for 1m; its session is still running, so it was not restarted

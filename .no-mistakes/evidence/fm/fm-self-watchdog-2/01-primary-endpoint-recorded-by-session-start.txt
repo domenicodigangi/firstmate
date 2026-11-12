@@ -1,0 +1,8 @@
+schema=fm-primary-endpoint.v1
+recorded_at=1794447388
+backend=herdr
+target=fm-lab-wd-1431289-27010:w1:p1
+workspace=w1
+cwd=/home/ddg/.no-mistakes/worktrees/67bf63ea0b24/01M76MEYHRQ0C1AN4YHY1AYC9J
+harness_pid=1438121
+launch=FM_HOME=/tmp/fm-lab.ZCTmDV claude Reply\ with\ the\ single\ word:\ ready

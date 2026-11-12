@@ -1,0 +1,26 @@
+# endpoint:
+target=fm-lab-wd-1431289-27010:w1:p1
+harness_pid=1639229
+# check (closes failed episode)
+primary-watchdog: 2026-11-12T01:47:27Z verdict=alive action=recovered - lock=held oldest-note-age=568 activity-age=0
+# close the primary's pane outright
+{"id":"cli:pane:close","result":{"type":"ok"}}
+[{"pane_id":"w1:p2","workspace_id":"w1","tab_id":"w1:t2"}]
+# check 1
+primary-watchdog: 2026-11-12T01:48:09Z verdict=dead action=restarted - relaunched in pane w1:p3
+# panes after:
+[{"pane_id":"w1:p2","workspace_id":"w1","tab_id":"w1:t2"},{"pane_id":"w1:p3","workspace_id":"w1","tab_id":"w1:t3"}]
+jq: error: syntax error, unexpected ',', expecting ':' (Unix shell quoting issues?) at <top-level>, line 1:
+[.result.tabs[]|{tab_id,label,workspace_id}]                             
+jq: 1 compile error
+# lock / session-start-complete / endpoint target:
+1654596
+1654596
+target=fm-lab-wd-1431289-27010:w1:p3
+# episode:
+since=1794448051
+reason=dead
+restart_at=1794448051
+restart_result=ok
+# check 2
+primary-watchdog: 2026-11-12T01:48:11Z verdict=alive action=recovered - lock=held oldest-note-age=612 activity-age=0

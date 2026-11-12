@@ -1,0 +1,22 @@
+# before: lock holder 1438121; pane foreground:
+[{"argv":["claude","Reply with the single word: ready"],"cmdline":"claude Reply with the single word: ready","cwd":"/home/ddg/.no-mistakes/worktrees/67bf63ea0b24/01M76MEYHRQ0C1AN4YHY1AYC9J","name":"claude","pid":1438121}]
+# check 1
+primary-watchdog: 2026-11-12T01:42:40Z verdict=stalled action=alerted - firstmate in /tmp/fm-lab.ZCTmDV has left an inbox note unhandled for 4m with no turn activity for 1m; its session is still running, so it was not restarted
+# check 2
+primary-watchdog: 2026-11-12T01:42:42Z verdict=stalled action=quiet - already alerted for this episode; lock=held oldest-note-age=283 activity-age=113
+# check 3
+primary-watchdog: 2026-11-12T01:42:43Z verdict=stalled action=quiet - already alerted for this episode; lock=held oldest-note-age=285 activity-age=115
+# episode record:
+since=1794447757
+reason=stalled
+restart_at=1794447757
+restart_result=refused
+alerted_at=1794447757
+# alert marker:
+2026-11-12T01:42:39Z firstmate in /tmp/fm-lab.ZCTmDV has left an inbox note unhandled for 4m with no turn activity for 1m; its session is still running, so it was not restarted
+# command-channel deliveries (config/wedge-alarm):
+01:42:40 ALERT firstmate in /tmp/fm-lab.ZCTmDV has left an inbox note unhandled for 4m with no turn activity for 1m; its session is still running, so it was not restarted
+# after: lock holder 1438121; pane foreground:
+[{"argv":["claude","Reply with the single word: ready"],"cmdline":"claude Reply with the single word: ready","cwd":"/home/ddg/.no-mistakes/worktrees/67bf63ea0b24/01M76MEYHRQ0C1AN4YHY1AYC9J","name":"claude","pid":1438121}]
+# last-restart stamp:
+cat: /tmp/fm-lab.ZCTmDV/state/.primary-watchdog-last-restart: No such file or directory

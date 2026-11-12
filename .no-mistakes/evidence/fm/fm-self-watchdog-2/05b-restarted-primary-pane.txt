@@ -1,0 +1,12 @@
+ ▐▛███▛█   Claude Code v2.1.322
+▝▜██████▀  Opus 5.5 with medium effort · Claude Ultra
+ ▝▝   ▝▝   ~/.no-mistakes/worktrees/67bf63ea0b24/01M76MEYHRQ0C1AN4YHY1AYC9J · /rc
+❯ Use the Bash tool with timeout 300000 to run: bin/fm-session-start.sh >/dev/null 2>&1 - then reply only: started
+● Running bin/fm-session-start.sh >/dev/null 2>&1
+  ⎿  $ bin/fm-session-start.sh >/dev/null 2>&1
+· Slithering… (35s · ↓ 93 tokens)
+───────────────────────────────────────────────────────────────────────────────────────────────────────────────────────
+❯
+───────────────────────────────────────────────────────────────────────────────────────────────────────────────────────
+  [Opus 5.5] 7% context | 01M76MEYHRQ0C1AN4YHY1AYC9J | 7d 28% (resets Sun 04:00) | Fable 7d 16%
+  ⏵⏵ auto mode on (shift+tab to cycle)

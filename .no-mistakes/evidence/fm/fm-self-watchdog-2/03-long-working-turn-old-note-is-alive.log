@@ -1,0 +1,16 @@
+# stamps:
+.session-start-complete 2026-11-12 01:36:28.374243588 +0000
+.claude-autoarm-epoch absent
+inbox/handled absent
+transcript: /home/ddg/.claude/projects/-home-ddg--no-mistakes-worktrees-67bf63ea0b24-01M76MEYHRQ0C1AN4YHY1AYC9J/8e09474c-5f0d-4c5e-9992-8fefd93dc964.jsonl
+2026-11-12 01:39:39.162546158 +0000
+now 01:39:44
+primary-watchdog: 2026-11-12T01:39:46Z verdict=alive action=none - lock=held oldest-note-age=107 activity-age=5
+     (ctrl+b to run in background)
+· Sketching… (46s · ↓ 363 tokens)
+  ⎿  Tip: Use /feedback to help us improve!
+───────────────────────────────────────────────────────────────────────────────────────────────────────────────────────
+❯
+───────────────────────────────────────────────────────────────────────────────────────────────────────────────────────
+  [Opus 5.5] 7% context | 01M76MEYHRQ0C1AN4YHY1AYC9J | 7d 28% (resets Sun 04:00) | Fable 7d 16%
+  ⏵⏵ auto mode on (shift+tab to cycle)
