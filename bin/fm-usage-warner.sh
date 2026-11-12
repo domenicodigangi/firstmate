@@ -41,9 +41,9 @@
 # windows[]. A read that yields no usable window is reported, never assumed ok.
 #
 # Notifications are posted with `osascript display notification` under this
-# script's own title - the same OS-level call bin/fm-supervise-daemon.sh's
-# wedge_alarm_via_osascript makes, without sourcing or otherwise coupling to
-# that daemon's away-mode-specific config and rate limiting. Notification
+# script's own title - the same OS-level call bin/fm-alert-channel-lib.sh's
+# wedge_alarm_via_osascript makes, without sourcing it or otherwise coupling to
+# the away-mode daemon's config and rate limiting. Notification
 # Center is macOS-only, so `arm` refuses on any other platform rather than
 # registering a check that can never speak.
 #

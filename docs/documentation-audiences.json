@@ -642,6 +642,10 @@
       "audience": "operator-current"
     },
     {
+      "path": "docs/primary-watchdog.md",
+      "audience": "operator-current"
+    },
+    {
       "path": "docs/zellij-backend.md",
       "audience": "operator-current"
     },
