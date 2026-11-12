@@ -644,6 +644,12 @@ spawn_secondmate_harness() { # <case-dir> <id> <harness> [extra fake tools...]
     fm_test_run_spawn "$primary" "$sm" "$fakebin" "$id" "$sm" "$harness" --secondmate
 }
 
+# A surfacing checkpoint returns on its first actionable wake, so its bound only
+# caps a failure. Surfacing a stall takes watcher startup plus at least one
+# stall tick, which a loaded host stretched past 8 seconds; the quiet checks keep
+# the default short bound because they must wait it out.
+STALL_SURFACE_BOUND=30
+
 secondmate_stall_watch() { # <primary> <id> <out> [seconds]
   local primary=$1 id=$2 out=$3 seconds=${4:-4} state window fakebin
   state="$primary/state"
@@ -726,7 +732,7 @@ test_secondmate_claude_spawn_arms_busy_for_the_stall_gate() {
   # be inside the one-second threshold when the idle checkpoint starts, so
   # wait out the threshold before asking the same frozen row to surface.
   sleep 2
-  secondmate_stall_watch "$primary" "$id" "$case_dir/watch-idle.out" 8
+  secondmate_stall_watch "$primary" "$id" "$case_dir/watch-idle.out" "$STALL_SURFACE_BOUND"
   grep -F "check: secondmate wake-loop stalled: mate=$id row=7" "$case_dir/watch-idle.out" >/dev/null \
     || fail "the same frozen queue stayed hidden after the secondmate turn ended: $(cat "$case_dir/watch-idle.out")"
   pass "a claude secondmate spawn arms the busy contract the stall gate can see, and Stop does not wake the parent"
@@ -810,7 +816,7 @@ test_secondmate_claude_stop_guard_owns_the_stop_verdict() {
     [ "$out" = "idle claude-hook" ] || fail "an allowed Stop must record idle ($order), got '$out'"
   done
   sleep 2
-  secondmate_stall_watch "$primary" "$id" "$case_dir/watch-allowed.out" 8
+  secondmate_stall_watch "$primary" "$id" "$case_dir/watch-allowed.out" "$STALL_SURFACE_BOUND"
   grep -F "check: secondmate wake-loop stalled: mate=$id row=7" "$case_dir/watch-allowed.out" >/dev/null \
     || fail "the frozen queue stayed hidden after an allowed Stop: $(cat "$case_dir/watch-allowed.out")"
 

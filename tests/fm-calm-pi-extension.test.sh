@@ -185,6 +185,7 @@ test_home_resolution() {
     echo "skip: node or npm not found for Pi calm home-resolution test"
     return 0
   fi
+  fm_node_ts_gate "Pi calm home-resolution test" || return 0
   if [ ! -f "$PI_PACKAGE_DIR/package.json" ]; then
     echo "skip: installed @earendil-works/pi-coding-agent package not found"
     return 0
@@ -314,6 +315,7 @@ test_pi_compat_degraded_adapter() {
     echo "skip: node or npm not found for Pi calm degraded-adapter test"
     return 0
   fi
+  fm_node_ts_gate "Pi calm degraded-adapter test" || return 0
   if [ ! -f "$PI_PACKAGE_DIR/package.json" ]; then
     echo "skip: installed @earendil-works/pi-coding-agent package not found"
     return 0
@@ -421,6 +423,7 @@ test_pi_compat_missing_adapter_exports() {
     echo "skip: node not found for Pi calm missing-adapter-export test"
     return 0
   fi
+  fm_node_ts_gate "Pi calm missing-adapter-export test" || return 0
 
   fixture="$TMP_ROOT/missing-adapter-exports"
   mkdir -p \
@@ -483,6 +486,7 @@ test_queued_operational_rows() {
     echo "skip: node or npm not found for Pi Calm queued-row test"
     return 0
   fi
+  fm_node_ts_gate "Pi Calm queued-row test" || return 0
   if [ ! -f "$PI_PACKAGE_DIR/package.json" ]; then
     echo "skip: installed @earendil-works/pi-coding-agent package not found"
     return 0
@@ -587,6 +591,8 @@ function makeHost(session) {
   Object.assign(host, {
     // Pi reads its session through runtimeHost, which a session replacement swaps.
     runtimeHost: { session },
+    // Pi 1.5 iterates this constructor-initialized field in updatePendingMessagesDisplay.
+    pendingBashComponents: [],
     compactionQueuedMessages: [],
     statuses: [],
     warnings: [],
@@ -794,6 +800,7 @@ test_builtin_gate_load_time() {
     echo "skip: node or npm not found for Pi calm gate test"
     return 0
   fi
+  fm_node_ts_gate "Pi calm gate test" || return 0
   if [ ! -f "$PI_PACKAGE_DIR/package.json" ]; then
     echo "skip: installed @earendil-works/pi-coding-agent package not found"
     return 0
@@ -884,6 +891,7 @@ test_calm_activation_collision_and_regression_bound() {
     echo "skip: node or npm not found for Pi calm activation test"
     return 0
   fi
+  fm_node_ts_gate "Pi calm activation test" || return 0
   if [ ! -f "$PI_PACKAGE_DIR/package.json" ]; then
     echo "skip: installed @earendil-works/pi-coding-agent package not found"
     return 0
@@ -1102,6 +1110,7 @@ test_rendering_and_session_lifecycle() {
     echo "skip: node or npm not found for Pi calm renderer test"
     return 0
   fi
+  fm_node_ts_gate "Pi calm renderer test" || return 0
   if [ ! -f "$PI_PACKAGE_DIR/package.json" ]; then
     echo "skip: installed @earendil-works/pi-coding-agent package not found"
     return 0
@@ -1827,6 +1836,7 @@ test_calm_mid_turn_working_notes() {
     echo "skip: node or npm not found for Pi calm mid-turn renderer test"
     return 0
   fi
+  fm_node_ts_gate "Pi calm mid-turn renderer test" || return 0
   if [ ! -f "$PI_PACKAGE_DIR/package.json" ]; then
     echo "skip: installed @earendil-works/pi-coding-agent package not found"
     return 0
@@ -2961,6 +2971,7 @@ test_working_ship_geometry_and_lifecycle() {
     echo "skip: node or npm not found for Pi Calm working-ship test"
     return 0
   fi
+  fm_node_ts_gate "Pi Calm working-ship test" || return 0
   if [ ! -f "$PI_PACKAGE_DIR/package.json" ]; then
     echo "skip: installed @earendil-works/pi-coding-agent package not found"
     return 0

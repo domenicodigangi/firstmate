@@ -438,6 +438,31 @@ if [ "${FM_TEST_SKIP_ORPHAN_REAP:-0}" != 1 ]; then
   fm_test_reap_orphans
 fi
 
+# --- TypeScript-loading node gate -------------------------------------------
+#
+# fm_node_ts_gate <what>
+#
+# For a test section that imports a Pi .ts extension straight into node. It
+# returns 0 when this host's node loads .ts modules natively (type stripping is
+# unflagged from Node 22.18, and the Pi package itself requires >=22.19). On an
+# older node it prints one "skip:" line naming <what> and the node version and
+# returns 1, so the caller returns without running the section. Under CI=true
+# it fails instead, so a CI image regression cannot pass as a skip.
+fm_node_ts_gate() {
+  local what=$1 probe version
+  probe=$(mktemp -d "${TMPDIR:-/tmp}/fm-node-ts.XXXXXX") || fail "fm_node_ts_gate: mktemp failed"
+  printf 'const probe: number = 1;\nif (probe !== 1) process.exit(1);\n' > "$probe/probe.ts"
+  if node "$probe/probe.ts" >/dev/null 2>&1; then
+    rm -rf -- "$probe"
+    return 0
+  fi
+  rm -rf -- "$probe"
+  version=$(node --version 2>/dev/null || printf 'absent')
+  [ "${CI:-}" != true ] || fail "$what needs a node that loads .ts modules; node $version cannot"
+  printf 'skip: %s: node %s cannot load .ts modules (needs Node >=22.18; Pi requires >=22.19)\n' "$what" "$version"
+  return 1
+}
+
 # --- live-capability gate ---------------------------------------------------
 #
 # fm_live_gate <policy> <vars> [tool ...]
