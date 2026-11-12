@@ -25,10 +25,11 @@
 #             AND the primary's last turn activity is older than that threshold.
 #             Turn activity is the newest of the primary harness's own Claude
 #             session transcript, which grows during a turn
-#             ($HOME/.claude/projects/<recorded cwd with every character
-#             outside A-Za-z0-9 as ->/<state/.lock-session id>.jsonl, as Claude
-#             Code names it, or the newest *.jsonl there when
-#             no id is recorded), state/.claude-autoarm-epoch (every Claude
+#             ($HOME/.claude/projects/<encoded cwd>/<state/.lock-session id>.jsonl,
+#             where <encoded cwd> is the recorded cwd with every character
+#             outside A-Za-z0-9 replaced by "-" as Claude Code names it, or
+#             the newest *.jsonl there when no id is recorded),
+#             state/.claude-autoarm-epoch (every Claude
 #             primary turn end), state/inbox/handled (every note
 #             acknowledgement), and state/.session-start-complete.
 #   alive     neither; a note waiting behind recent activity is a slow answer.
