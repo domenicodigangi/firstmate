@@ -713,6 +713,7 @@ An absent file means `auto`, i.e. default-on on macOS: the alarm exists precisel
 
 A missing or failing channel logs and falls through to the next, never crashing the daemon.
 See [`wedge-alarm.md`](wedge-alarm.md) for the current channel reference, [`verification/supervision.md`](verification/supervision.md#wedge-alarm-channels) for active evidence, and [`examples/wedge-alarm`](examples/wedge-alarm) for a copyable config.
+The opt-in [primary watchdog](primary-watchdog.md) alerts through these same channels when it cannot restart a stopped primary.
 
 ## Trace context propagation (config/trace-context / FM_TRACE_CONTEXT)
 

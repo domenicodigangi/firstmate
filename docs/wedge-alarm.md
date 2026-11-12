@@ -10,6 +10,7 @@ The durable marker and tmux flash remain as additional signals.
 `config/wedge-alarm` is local and gitignored.
 It lists channel directives, one per non-empty, non-comment line, and every listed non-`off` channel fires best-effort.
 `FM_WEDGE_ALARM_CHANNEL` overrides the file with one directive for focused testing.
+The [primary watchdog](primary-watchdog.md) alerts through the same channels, and `bin/fm-alert-channel-lib.sh` owns their implementation for both.
 
 - `off` disables every active alert while retaining the durable marker and tmux flash.
 - `auto` or `default` resolves to `osascript` on macOS.
@@ -31,7 +32,7 @@ See [`examples/wedge-alarm`](examples/wedge-alarm) for a copyable config.
 
 ## Test safety
 
-Every notifier routes through `FM_WEDGE_ALARM_EXEC` in `wedge_alarm_emit`.
+Every notifier routes through `FM_WEDGE_ALARM_EXEC` in `wedge_alarm_emit` (`bin/fm-alert-channel-lib.sh`).
 When the daemon is sourced as a library, that seam defaults to `discard`, so a test cannot accidentally post a real notification.
 `tests/wake-helpers.sh` replaces it with a recorder when a suite needs to assert channel selection and summary propagation.
 Production leaves the seam unset and uses the configured real channels.

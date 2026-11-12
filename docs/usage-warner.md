@@ -35,7 +35,7 @@ The read bound is 10 seconds, or `FM_CHECK_TIMEOUT` minus 3 seconds when that is
 
 ## Notification path
 
-Warnings reach macOS through Notification Center (`osascript display notification`), the same OS-level path firstmate's own away-mode wedge alarm resolves to on this platform ([`bin/fm-supervise-daemon.sh`](../bin/fm-supervise-daemon.sh)'s `wedge_alarm_via_osascript`), so the home keeps one alert mechanism rather than two.
+Warnings reach macOS through Notification Center (`osascript display notification`), the same OS-level path firstmate's own away-mode wedge alarm resolves to on this platform ([`bin/fm-alert-channel-lib.sh`](../bin/fm-alert-channel-lib.sh)'s `wedge_alarm_via_osascript`), so the home keeps one alert mechanism rather than two.
 This script does not source or call into that daemon: production only execs the daemon, and the daemon's own library-mode guard defaults its notifier seam to "discard" whenever it is sourced instead, specifically so a second sourcing consumer can never fire a real notification through it.
 The away-mode config schema and max-defer rate limiting are also specific to buffered escalations, not to this feature's own edge-triggered de-dupe.
 So this script posts the identical OS call under its own title instead, which is the reusable part of "the same alerting path" without reaching into daemon-internal, away-mode-specific state.
