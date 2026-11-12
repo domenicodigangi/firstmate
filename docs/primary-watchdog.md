@@ -8,7 +8,7 @@ It is opt-in: nothing runs until its cron line is installed.
 
 The watchdog reads only firstmate-owned records of the home it is scoped to.
 The primary counts as stopped when its session lock is free or stale, or when an inbox note has stayed unacknowledged past the threshold (15 minutes by default) while the primary has also shown no turn activity for that long.
-Turn activity is the newest change to the primary harness's own Claude session transcript, which grows while a turn is still working, or to the firstmate turn-end, note-acknowledgement, and session-start stamps.
+Turn activity is the newest change to the primary harness's own Claude session transcript, which grows while a turn is still working and lives in the Claude project directory named after the recorded working directory with every character outside `A-Za-z0-9` replaced by `-`, or to the firstmate turn-end, note-acknowledgement, and session-start stamps.
 A note waiting behind recent turn activity is a slow answer, not a stop, and worker state is never read, so one slow worker or answer never fires it.
 The script header owns the exact verdicts, activity signals, and episode rules.
 

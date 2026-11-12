@@ -25,8 +25,9 @@
 #             AND the primary's last turn activity is older than that threshold.
 #             Turn activity is the newest of the primary harness's own Claude
 #             session transcript, which grows during a turn
-#             ($HOME/.claude/projects/<recorded cwd with every / and . as ->/
-#             <state/.lock-session id>.jsonl, or the newest *.jsonl there when
+#             ($HOME/.claude/projects/<recorded cwd with every character
+#             outside A-Za-z0-9 as ->/<state/.lock-session id>.jsonl, as Claude
+#             Code names it, or the newest *.jsonl there when
 #             no id is recorded), state/.claude-autoarm-epoch (every Claude
 #             primary turn end), state/inbox/handled (every note
 #             acknowledgement), and state/.session-start-complete.
@@ -210,8 +211,7 @@ primary_transcripts() {
   local cwd dir id
   cwd=$(field "$ENDPOINT" cwd)
   [ -n "$cwd" ] && [ -n "${HOME:-}" ] || return 0
-  cwd=${cwd//\//-}
-  dir="$HOME/.claude/projects/${cwd//./-}"
+  dir="$HOME/.claude/projects/${cwd//[^a-zA-Z0-9]/-}"
   [ -d "$dir" ] || return 0
   if id=$(fm_session_lock_recorded_session_id "$STATE"); then
     printf '%s\n' "$dir/$id.jsonl"

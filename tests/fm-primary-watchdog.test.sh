@@ -419,13 +419,13 @@ test_rex_channel_records_alert_once() {
 
 test_long_turn_transcript_keeps_alive() {
   local home pid out dir
-  home=$(make_home long-turn)
+  home=$(make_home long_turn)
   pid=$(start_holder)
   printf '%s\n' "$pid" > "$home/state/.lock"
   write_endpoint "$home" "$pid"
   write_note "$home" 1800
   set_activity "$home" 1800
-  dir="$home/userhome/.claude/projects/$(printf '%s' "$home" | tr '/.' '--')"
+  dir="$home/userhome/.claude/projects/$(printf '%s' "$home" | sed 's/[^A-Za-z0-9]/-/g')"
   mkdir -p "$dir"
   printf 'sess-1\n' > "$home/state/.lock-session"
   printf '{}\n' > "$dir/sess-1.jsonl"
