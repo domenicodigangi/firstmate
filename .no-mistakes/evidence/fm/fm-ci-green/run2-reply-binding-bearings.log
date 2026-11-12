@@ -1,0 +1,176 @@
+FM_TEST_BEGIN 2026-11-12T03:02:15Z tests/fm-remote-reply.test.sh family=secondmate expected_gate_skip=none
+ok - default delta reader waits 0.5 seconds then delivers a non-destructive complete-line delta
+ok - override delta reader waits 0.07 seconds then delivers a non-destructive complete-line delta
+ok - remote reply adapter leaves no temporary path or lifecycle lock behind on any exit
+ok - transport failures and non-schema diagnostics stay out of captured results
+ok - a blocking non-destructive remote delta reaches durable process-event capture
+ok - a captured delta is applied, acknowledged, and re-armed without a handler
+ok - ingest appends one validated line, fetches its document, and advances the cursor
+ok - replayed capture has one deduplicated append and one durable handling identity
+ok - later generations cannot invalidate an unacknowledged ingested result
+ok - the remote status and decision model mirrors and the cursor advances
+ok - a remote mate's new decision folds open exactly as a local mate's does
+ok - a replayed mirrored delta is idempotent in both the stream and the cursor
+ok - transported control bytes are normalized in place and never stop the stream
+ok - payload protocol-field names cannot collide with transport metadata
+ok - NUL bytes are normalized in place before shell line processing
+ok - local document storage failures remain retryable until delivery succeeds
+ok - a structured pointer must end at its token boundary
+ok - adjacent pointers are fetched while malformed tokens remain unchanged
+ok - a rejected candidate never gives the following text a false leading boundary
+ok - nested remote reports relay while an undeliverable foreign pointer fails open
+ok - the reported incident raises no standing decision and still delivers the report
+ok - an undeliverable structured offer fails open with one note and never a decision
+ok - a remote refusal surfaces its own reason without opening a decision
+ok - a failed pointer extraction never commits a partial delta
+ok - a failed mirror write never drops status content or advances the cursor
+ok - source-line identity survives commit failure and cursor-loss recapture
+ok - a mirrored reserved-key line cannot squat or clear the parent's own decision
+ok - a reply that arrives after escalation resolves it and clears the open decision
+ok - a remote reply listener stays owned across empty waits and a delta
+ok - a failed remote read exits instead of relistening
+ok - persistent ingestion failure leaves exactly one durable capture
+ok - a preempted reply poll reports a closed window without publishing channel freshness
+ok - a preempted reply poll keeps its listener and reconcile launches nothing
+ok - a quiet reply window publishes the caught-up watermark the reply guard reads
+ok - a cursor-loss whole-log recapture is acknowledged quietly with no duplicate wake
+ok - truncation is detected, escalated once, and not silently rebased
+ok - a repeated continuity break after an operator resolve appends nothing
+ok - remote reply retirement quiesces and refuses unhandled captured results
+ok - a later continuity break after repair and re-advance opens the decision again
+ok - an old-format continuity line does not swallow the next break
+ok - a later continuity break after the cursor moves without retirement opens the decision again
+ok - a continuity break after retirement and an identical restore opens the decision once
+ok - a failed cursor removal does not increase the retirement count
+ok - a retirement that stops after removing the cursor leaves the old count
+ALL TESTS PASSED
+FM_TEST_END 2026-11-12T03:14:12Z tests/fm-remote-reply.test.sh exit=0 duration_ms=716946 gate_skip=false
+FM_TEST_BEGIN 2026-11-12T03:14:12Z tests/fm-extension-binding.test.sh family=standalone expected_gate_skip=none
+ok - unknown extension conformance section selectors fail before setup
+/tmp/fm-test-run.HYiTRy/w2/tmp/fm-extension-binding.Zda7aB/remote-root/bin/fm-procevent.sh: line 259: /tmp/fm-test-run.HYiTRy/w2/tmp/fm-extension-binding.Zda7aB/remote-root/bin/fm-task-inbox-lib.sh: No such file or directory
+/tmp/fm-test-run.HYiTRy/w2/tmp/fm-extension-binding.Zda7aB/remote-root/bin/fm-procevent.sh: line 261: /tmp/fm-test-run.HYiTRy/w2/tmp/fm-extension-binding.Zda7aB/remote-root/bin/fm-backend.sh: No such file or directory
+ok - the section coordinator propagates ordered failures and bounded cleanup
+/tmp/fm-test-run.HYiTRy/w2/tmp/fm-extension-binding.Zda7aB/remote-root/bin/fm-procevent.sh: line 259: /tmp/fm-test-run.HYiTRy/w2/tmp/fm-extension-binding.Zda7aB/remote-root/bin/fm-task-inbox-lib.sh: No such file or directory
+/tmp/fm-test-run.HYiTRy/w2/tmp/fm-extension-binding.Zda7aB/remote-root/bin/fm-procevent.sh: line 261: /tmp/fm-test-run.HYiTRy/w2/tmp/fm-extension-binding.Zda7aB/remote-root/bin/fm-backend.sh: No such file or directory
+not-autohandled: example-file (left for the handler; still unacknowledged)
+/tmp/fm-test-run.HYiTRy/w2/tmp/fm-extension-binding.Zda7aB/remote-root/bin/fm-procevent.sh: line 259: /tmp/fm-test-run.HYiTRy/w2/tmp/fm-extension-binding.Zda7aB/remote-root/bin/fm-task-inbox-lib.sh: No such file or directory
+/tmp/fm-test-run.HYiTRy/w2/tmp/fm-extension-binding.Zda7aB/remote-root/bin/fm-procevent.sh: line 261: /tmp/fm-test-run.HYiTRy/w2/tmp/fm-extension-binding.Zda7aB/remote-root/bin/fm-backend.sh: No such file or directory
+not-autohandled: flow-source (left for the handler; still unacknowledged)
+not ok - an isolated extension conformance section failed
+FM_TEST_END 2026-11-12T03:14:49Z tests/fm-extension-binding.test.sh exit=1 duration_ms=36814 gate_skip=false
+FM_TEST_BEGIN 2026-11-12T03:14:49Z tests/fm-bearings-snapshot.test.sh family=snapshot-bearings expected_gate_skip=optional-binary
+1..60
+ok - task teardown during metadata capture is omitted without aborting the snapshot
+ok - current state and decision hints share one captured status observation
+ok - reused live state is discarded when task generation changes
+ok - large local snapshot overlaps local reads with byte-identical serial and concurrent projections
+ok - remote ledgers collect concurrently under one budget, reuse aged cache, and cancel wedged collectors
+ok - a missing remote ledger stays explicitly unreadable without remote summary computation
+ok - Domain Alpha structured state overrides a stale parent Phase 7 event
+ok - GNU stat file reads select -c without BSD filesystem-report pollution
+ok - parent activity evidence is bounded and disclosed
+ok - Bearings excludes a status-only child decision
+ok - a structured child captain hold reaches Captain's Call
+ok - missing, invalid, unreadable, malformed, and unavailable-child homes stay explicit unknowns
+ok - oversized ledgers stay strict unknown
+ok - secondmate and per-home child counts are bounded, disclosed, and explicitly expandable
+ok - parent decisions remain untrusted contradiction evidence
+ok - parent evidence reconciliation distinguishes matching holds, blocks, and decisions
+ok - nonprogressing child states are explicit and inconsistent terminal rows invalidate
+not ok - bearings omitted registry truncation disclosure: {
+  "schema": "fm-bearings.v1",
+  "home": "fm-bearings.ejMhvW/registry-bounds",
+  "generated": "2026-07-11T18:00:00Z",
+  "prs": "not_requested (run: /bearings include PRs)",
+  "contributions": {
+    "scope": "owned contributions per home",
+    "known": 0,
+    "checked": 0,
+    "counts": {
+      "captain": 0,
+      "fleet": 0,
+      "maintainer": 0,
+      "nobody": 0
+    },
+    "complete": false,
+    "proven_clear": false,
+    "unmeasured_homes": 0,
+    "unreadable_records": 1,
+    "unmeasured": 0,
+    "stale_verdicts": 0,
+    "missing_verdicts": 0,
+    "captain_omitted": 0,
+    "captain": []
+  },
+  "in_flight": [],
+  "secondmates": [
+    {
+      "id": "(registry)",
+      "state": "unknown",
+      "doing": "registered secondmate table read timed out",
+      "provenance": "registered-table",
+      "freshness": "unavailable",
+      "age_seconds": null,
+      "contradiction": false,
+      "reason": "registered secondmate table read timed out"
+    }
+  ],
+  "secondmate_reconcile": [],
+  "decisions_open": [],
+  "landed": [],
+  "gates": [],
+  "reports": [],
+  "recorded_prs": [],
+  "omitted": [
+    {
+      "surface": "backlog item bodies",
+      "reveal": "--fields bodies"
+    },
+    {
+      "surface": "task paths",
+      "reveal": "--fields paths"
+    },
+    {
+      "surface": "watch/steer actions",
+      "reveal": "--fields actions"
+    },
+    {
+      "surface": "healthy endpoint detail",
+      "reveal": "--fields endpoints"
+    },
+    {
+      "surface": "full scout-report inventory",
+      "reveal": "--all-reports"
+    },
+    {
+      "surface": "secondmate registry unavailable: registered secondmate table read timed out",
+      "reveal": "inspect data/secondmates.md"
+    },
+    {
+      "surface": "live PR discovery + checks",
+      "reveal": "--include-prs"
+    }
+  ]
+}
+FM_TEST_END 2026-11-12T03:35:10Z tests/fm-bearings-snapshot.test.sh exit=1 duration_ms=1220936 gate_skip=false
+FM_TEST_SUMMARY total=3 failed=2 skipped_gate=0 duration_ms=1976047
+FM_TEST_SUMMARY_FAMILY family=secondmate count=1 duration_ms=716946 failed=0
+FM_TEST_SUMMARY_FAMILY family=snapshot-bearings count=1 duration_ms=1220936 failed=1
+FM_TEST_SUMMARY_FAMILY family=standalone count=1 duration_ms=36814 failed=1
+FM_TEST_SLOWEST rank=1 script=tests/fm-bearings-snapshot.test.sh duration_ms=1220936
+FM_TEST_SLOWEST rank=2 script=tests/fm-remote-reply.test.sh duration_ms=716946
+FM_TEST_SLOWEST rank=3 script=tests/fm-extension-binding.test.sh duration_ms=36814
+rm: cannot remove '/tmp/fm-test-run.HYiTRy/w2/tmp/fm-extension-binding.Zda7aB/homes/remote-home/data/extensions/packages/org.example.remote/1.2.3/b6cb4355756663bae9ba96b7b7c14bc807a41f0f0bd4affad184bb7187059911/scenario': Permission denied
+rm: cannot remove '/tmp/fm-test-run.HYiTRy/w2/tmp/fm-extension-binding.Zda7aB/homes/remote-home/data/extensions/packages/org.example.remote/1.2.3/b6cb4355756663bae9ba96b7b7c14bc807a41f0f0bd4affad184bb7187059911/helper.txt': Permission denied
+rm: cannot remove '/tmp/fm-test-run.HYiTRy/w2/tmp/fm-extension-binding.Zda7aB/homes/remote-home/data/extensions/packages/org.example.remote/1.2.3/b6cb4355756663bae9ba96b7b7c14bc807a41f0f0bd4affad184bb7187059911/entrypoint.py': Permission denied
+rm: cannot remove '/tmp/fm-test-run.HYiTRy/w2/tmp/fm-extension-binding.Zda7aB/homes/remote-home/data/extensions/packages/org.example.remote/1.2.3/b6cb4355756663bae9ba96b7b7c14bc807a41f0f0bd4affad184bb7187059911/nested/evidence.txt': Permission denied
+rm: cannot remove '/tmp/fm-test-run.HYiTRy/w2/tmp/fm-extension-binding.Zda7aB/homes/remote-home/data/extensions/packages/org.example.remote/1.2.3/b6cb4355756663bae9ba96b7b7c14bc807a41f0f0bd4affad184bb7187059911/firstmate-extension.json': Permission denied
+rm: cannot remove '/tmp/fm-test-run.HYiTRy/w2/tmp/fm-extension-binding.rYLFRV/homes/flow/data/extensions/packages/org.example.flow/1.2.3/f7f5ceb6706aeebc8dba6d2a947d4e40ecc7a7298beee55232e383e7d836ae13/scenario': Permission denied
+rm: cannot remove '/tmp/fm-test-run.HYiTRy/w2/tmp/fm-extension-binding.rYLFRV/homes/flow/data/extensions/packages/org.example.flow/1.2.3/f7f5ceb6706aeebc8dba6d2a947d4e40ecc7a7298beee55232e383e7d836ae13/helper.txt': Permission denied
+rm: cannot remove '/tmp/fm-test-run.HYiTRy/w2/tmp/fm-extension-binding.rYLFRV/homes/flow/data/extensions/packages/org.example.flow/1.2.3/f7f5ceb6706aeebc8dba6d2a947d4e40ecc7a7298beee55232e383e7d836ae13/entrypoint.py': Permission denied
+rm: cannot remove '/tmp/fm-test-run.HYiTRy/w2/tmp/fm-extension-binding.rYLFRV/homes/flow/data/extensions/packages/org.example.flow/1.2.3/f7f5ceb6706aeebc8dba6d2a947d4e40ecc7a7298beee55232e383e7d836ae13/firstmate-extension.json': Permission denied
+rm: cannot remove '/tmp/fm-test-run.HYiTRy/w2/tmp/fm-extension-binding.ADOaAq/homes/lock-order/data/extensions/packages/org.example.lock-order/1.2.3/11b83728a5037c96f0c788b9a510d0a9cb82ed6e7b2c5d8426a8ef0bc943fdbf/scenario': Permission denied
+rm: cannot remove '/tmp/fm-test-run.HYiTRy/w2/tmp/fm-extension-binding.ADOaAq/homes/lock-order/data/extensions/packages/org.example.lock-order/1.2.3/11b83728a5037c96f0c788b9a510d0a9cb82ed6e7b2c5d8426a8ef0bc943fdbf/helper.txt': Permission denied
+rm: cannot remove '/tmp/fm-test-run.HYiTRy/w2/tmp/fm-extension-binding.ADOaAq/homes/lock-order/data/extensions/packages/org.example.lock-order/1.2.3/11b83728a5037c96f0c788b9a510d0a9cb82ed6e7b2c5d8426a8ef0bc943fdbf/entrypoint.py': Permission denied
+rm: cannot remove '/tmp/fm-test-run.HYiTRy/w2/tmp/fm-extension-binding.ADOaAq/homes/lock-order/data/extensions/packages/org.example.lock-order/1.2.3/11b83728a5037c96f0c788b9a510d0a9cb82ed6e7b2c5d8426a8ef0bc943fdbf/firstmate-extension.json': Permission denied
+EXIT=1

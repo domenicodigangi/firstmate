@@ -1,0 +1,135 @@
+1..60
+ok - task teardown during metadata capture is omitted without aborting the snapshot
+ok - current state and decision hints share one captured status observation
+ok - reused live state is discarded when task generation changes
+ok - large local snapshot overlaps local reads with byte-identical serial and concurrent projections
+not ok - one slow home prevented four fresh rows or hid its cache disclosure: {
+  "schema": "fm-bearings.v1",
+  "home": "fm-bearings.JotNER/concurrent-remote-ledgers",
+  "generated": "2026-09-01T22:00:00Z",
+  "prs": "not_requested (run: /bearings include PRs)",
+  "contributions": {
+    "scope": "owned contributions per home",
+    "known": 0,
+    "checked": 0,
+    "counts": {
+      "captain": 0,
+      "fleet": 0,
+      "maintainer": 0,
+      "nobody": 0
+    },
+    "complete": false,
+    "proven_clear": false,
+    "unmeasured_homes": 5,
+    "unreadable_records": 0,
+    "unmeasured": 0,
+    "stale_verdicts": 0,
+    "missing_verdicts": 0,
+    "captain_omitted": 0,
+    "captain": []
+  },
+  "in_flight": [],
+  "secondmates": [
+    {
+      "id": "(registry)",
+      "state": "unknown",
+      "doing": "registered secondmate table read timed out",
+      "provenance": "registered-table",
+      "freshness": "unavailable",
+      "age_seconds": null,
+      "contradiction": false,
+      "reason": "registered secondmate table read timed out"
+    },
+    {
+      "id": "ledger-1",
+      "state": "unknown",
+      "doing": "secondmate registration is unknown because the registry read is incomplete or unavailable",
+      "provenance": "unknown",
+      "freshness": "unknown",
+      "age_seconds": null,
+      "contradiction": false,
+      "reason": "secondmate registration is unknown because the registry read is incomplete or unavailable"
+    },
+    {
+      "id": "ledger-2",
+      "state": "unknown",
+      "doing": "secondmate registration is unknown because the registry read is incomplete or unavailable",
+      "provenance": "unknown",
+      "freshness": "unknown",
+      "age_seconds": null,
+      "contradiction": false,
+      "reason": "secondmate registration is unknown because the registry read is incomplete or unavailable"
+    },
+    {
+      "id": "ledger-3",
+      "state": "unknown",
+      "doing": "secondmate registration is unknown because the registry read is incomplete or unavailable",
+      "provenance": "unknown",
+      "freshness": "unknown",
+      "age_seconds": null,
+      "contradiction": false,
+      "reason": "secondmate registration is unknown because the registry read is incomplete or unavailable"
+    },
+    {
+      "id": "ledger-4",
+      "state": "unknown",
+      "doing": "secondmate registration is unknown because the registry read is incomplete or unavailable",
+      "provenance": "unknown",
+      "freshness": "unknown",
+      "age_seconds": null,
+      "contradiction": false,
+      "reason": "secondmate registration is unknown because the registry read is incomplete or unavailable"
+    },
+    {
+      "id": "ledger-5",
+      "state": "unknown",
+      "doing": "secondmate registration is unknown because the registry read is incomplete or unavailable",
+      "provenance": "unknown",
+      "freshness": "unknown",
+      "age_seconds": null,
+      "contradiction": false,
+      "reason": "secondmate registration is unknown because the registry read is incomplete or unavailable"
+    }
+  ],
+  "secondmate_reconcile": [],
+  "decisions_open": [],
+  "landed": [],
+  "gates": [],
+  "reports": [],
+  "recorded_prs": [],
+  "omitted": [
+    {
+      "surface": "backlog item bodies",
+      "reveal": "--fields bodies"
+    },
+    {
+      "surface": "task paths",
+      "reveal": "--fields paths"
+    },
+    {
+      "surface": "watch/steer actions",
+      "reveal": "--fields actions"
+    },
+    {
+      "surface": "healthy endpoint detail",
+      "reveal": "--fields endpoints"
+    },
+    {
+      "surface": "full scout-report inventory",
+      "reveal": "--all-reports"
+    },
+    {
+      "surface": "secondmate home(s) with unreadable structured state: 5",
+      "reveal": "inspect the listed secondmate home ledgers"
+    },
+    {
+      "surface": "secondmate registry unavailable: registered secondmate table read timed out",
+      "reveal": "inspect data/secondmates.md"
+    },
+    {
+      "surface": "live PR discovery + checks",
+      "reveal": "--include-prs"
+    }
+  ]
+}
+EXIT=1 elapsed=848s

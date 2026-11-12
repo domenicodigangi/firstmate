@@ -1,0 +1,15 @@
+/tmp/fm-extension-binding.94REvZ/remote-root/bin/fm-procevent.sh: line 259: /tmp/fm-extension-binding.94REvZ/remote-root/bin/fm-task-inbox-lib.sh: No such file or directory
+/tmp/fm-extension-binding.94REvZ/remote-root/bin/fm-procevent.sh: line 261: /tmp/fm-extension-binding.94REvZ/remote-root/bin/fm-backend.sh: No such file or directory
+/tmp/fm-extension-binding.94REvZ/remote-root/bin/fm-procevent.sh: line 259: /tmp/fm-extension-binding.94REvZ/remote-root/bin/fm-task-inbox-lib.sh: No such file or directory
+/tmp/fm-extension-binding.94REvZ/remote-root/bin/fm-procevent.sh: line 261: /tmp/fm-extension-binding.94REvZ/remote-root/bin/fm-backend.sh: No such file or directory
+/tmp/fm-extension-binding.94REvZ/remote-root/bin/fm-procevent.sh: line 259: /tmp/fm-extension-binding.94REvZ/remote-root/bin/fm-task-inbox-lib.sh: No such file or directory
+/tmp/fm-extension-binding.94REvZ/remote-root/bin/fm-procevent.sh: line 261: /tmp/fm-extension-binding.94REvZ/remote-root/bin/fm-backend.sh: No such file or directory
+not-autohandled: remote-source (left for the handler; still unacknowledged)
+/tmp/fm-extension-binding.94REvZ/remote-root/bin/fm-procevent.sh: line 259: /tmp/fm-extension-binding.94REvZ/remote-root/bin/fm-task-inbox-lib.sh: No such file or directory
+/tmp/fm-extension-binding.94REvZ/remote-root/bin/fm-procevent.sh: line 261: /tmp/fm-extension-binding.94REvZ/remote-root/bin/fm-backend.sh: No such file or directory
+/tmp/fm-extension-binding.94REvZ/remote-root/bin/fm-procevent.sh: line 259: /tmp/fm-extension-binding.94REvZ/remote-root/bin/fm-task-inbox-lib.sh: No such file or directory
+/tmp/fm-extension-binding.94REvZ/remote-root/bin/fm-procevent.sh: line 261: /tmp/fm-extension-binding.94REvZ/remote-root/bin/fm-backend.sh: No such file or directory
+ok - serialized remote binding crosses fm-on through addressed-home capture and retirement
+
+all extension-binding tests passed
+EXIT=0

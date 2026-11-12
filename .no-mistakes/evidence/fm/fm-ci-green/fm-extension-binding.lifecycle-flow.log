@@ -1,0 +1,4 @@
+not-autohandled: flow-source (left for the handler; still unacknowledged)
+ok - one external adapter registers, invokes, captures unhandled evidence, classifies, and terminally retires end to end
+not ok - inner host crash during result.silent wedged its runner before result.terminal
+EXIT=1

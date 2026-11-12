@@ -1,0 +1,6 @@
+### base c19b0050 bin/fm-wake-lib.sh
+unpublished-pid blocker, bound 1s: acquired=no elapsed=1s new_pid=
+published live holder,  bound 1s: acquired=no elapsed=1s
+### target 1cd05869 bin/fm-wake-lib.sh
+unpublished-pid blocker, bound 1s: acquired=yes elapsed=2s new_pid=2891837
+published live holder,  bound 1s: acquired=no elapsed=1s

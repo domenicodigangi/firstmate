@@ -1,0 +1,16 @@
+skip: Pi calm home-resolution test: node v22.17.0 cannot load .ts modules (needs Node >=22.18; Pi requires >=22.19)
+ok - Pi calm compatibility evidence never rejects a Pi version for being newer than 0.82.0, and still fails closed on a missing or malformed version
+skip: Pi calm degraded-adapter test: node v22.17.0 cannot load .ts modules (needs Node >=22.18; Pi requires >=22.19)
+skip: Pi calm missing-adapter-export test: node v22.17.0 cannot load .ts modules (needs Node >=22.18; Pi requires >=22.19)
+skip: Pi Calm queued-row test: node v22.17.0 cannot load .ts modules (needs Node >=22.18; Pi requires >=22.19)
+skip: Pi calm gate test: node v22.17.0 cannot load .ts modules (needs Node >=22.18; Pi requires >=22.19)
+skip: Pi calm activation test: node v22.17.0 cannot load .ts modules (needs Node >=22.18; Pi requires >=22.19)
+skip: Pi calm renderer test: node v22.17.0 cannot load .ts modules (needs Node >=22.18; Pi requires >=22.19)
+skip: Pi calm mid-turn renderer test: node v22.17.0 cannot load .ts modules (needs Node >=22.18; Pi requires >=22.19)
+ok - Pi operational follow-up E2E processes exact user-role notifications once while Calm hides current and adjacent rows, Calm off and absent render them, and restart preserves semantics
+ok - Pi 0.87.1 with Calm on hides and retains queued Firstmate input through Escape, delivers it once, and leaves Calm off stock
+ok - Pi Calm native /skill:ahoy geometry keeps every collapsed thinking and tool block at zero height while preserving expansion, history, restart, and Calm-off rendering
+skip: Pi Calm working-ship test: node v22.17.0 cannot load .ts modules (needs Node >=22.18; Pi requires >=22.19)
+ok - the rendered-export-DOM guard renders in one pass, retries a bounded number of Chrome start-up failures, and reports the Chrome binary, Chrome version, Pi version, exit status, and Chrome diagnostic when every attempt fails
+not ok - Chrome or Chromium is required for rendered export DOM assertions; set FM_CHROME_BIN to one
+EXIT=1 elapsed=151s

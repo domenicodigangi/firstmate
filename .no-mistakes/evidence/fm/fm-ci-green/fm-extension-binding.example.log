@@ -1,0 +1,3 @@
+not ok - example source never started waiting
+EXIT=1
+error: cannot start the runner's owner guard: example-file

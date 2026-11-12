@@ -1,0 +1,6 @@
+run1 HEAD exit=1 47s load=11.77 not ok - an isolated extension conformance section failed 
+run1 BASE exit=1 99s load=14.09 not ok - an isolated extension conformance section failed 
+run2 HEAD exit=1 173s load=16.01 not ok - an isolated extension conformance section failed 
+run2 BASE exit=1 243s load=14.42 not ok - an isolated extension conformance section failed 
+run3 HEAD exit=1 332s load=20.48 not ok - example source never started waiting not ok - an isolated extension conformance section failed 
+run3 BASE exit=1 408s load=21.97 not ok - example source never started waiting not ok - an isolated extension conformance section failed 

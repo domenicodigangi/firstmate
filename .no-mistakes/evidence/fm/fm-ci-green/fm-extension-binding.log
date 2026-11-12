@@ -1,0 +1,8 @@
+ok - unknown extension conformance section selectors fail before setup
+ok - the section coordinator propagates ordered failures and bounded cleanup
+/tmp/fm-extension-binding.soOWZb/remote-root/bin/fm-procevent.sh: line 259: /tmp/fm-extension-binding.soOWZb/remote-root/bin/fm-task-inbox-lib.sh: No such file or directory
+/tmp/fm-extension-binding.soOWZb/remote-root/bin/fm-procevent.sh: line 261: /tmp/fm-extension-binding.soOWZb/remote-root/bin/fm-backend.sh: No such file or directory
+not-autohandled: example-file (left for the handler; still unacknowledged)
+not ok - an isolated extension conformance section failed
+EXIT=1 elapsed=37s
+not-autohandled: flow-source (left for the handler; still unacknowledged)

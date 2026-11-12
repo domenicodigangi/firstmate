@@ -1,0 +1,2 @@
+not ok - register-extension and reconcile deadlocked on an unhandled extension result
+EXIT=1
