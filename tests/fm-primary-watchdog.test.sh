@@ -403,6 +403,7 @@ test_rex_channel_records_alert_once() {
   write_endpoint "$home" "$pid"
   write_note "$home" 1800
   set_activity "$home" 1800
+  # shellcheck disable=SC2016 # literal $1 is the alarm command's argument, expanded later by the channel
   printf 'command:printf "%%s\\n" "$1" >> %s/alerts\nrex\n' "$home" > "$home/config/wedge-alarm"
   out=$(unset FM_SUPERVISOR_BACKEND FM_SUPERVISOR_TARGET; ALARM_EXEC='' run_check "$home" 2>/dev/null)
   rc=$?
