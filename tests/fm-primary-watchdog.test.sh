@@ -577,6 +577,39 @@ test_errored_still_failing_alerts_once_and_retries() {
   pass "a primary that keeps failing alerts once and is nudged again at a bounded spacing"
 }
 
+test_unanswered_nudge_keeps_episode() {
+  local home out
+  home=$(make_errored_home errored-retrying 1800)
+  run_check "$home" >/dev/null || fail "nudge check must succeed"
+  # The nudge's own prompt is the newest entry while the API keeps retrying.
+  write_transcript "$home" resumed 400
+  out=$(run_check "$home") || fail "check must succeed while the nudge is unanswered"
+  assert_contains "$out" "verdict=errored" "an unanswered nudge keeps the errored episode"
+  assert_contains "$out" "action=wait" "an unanswered nudge is waited on"
+  assert_present "$home/state/.primary-watchdog" "an unanswered nudge does not close the episode"
+  # The retried turn finally fails.
+  write_transcript "$home" error 1800
+  out=$(run_check "$home") || fail "check must succeed for the late failure"
+  assert_contains "$out" "action=alerted" "a late failure after the nudge alerts the owner"
+  out=$(run_check "$home") || fail "check must succeed"
+  assert_contains "$out" "action=quiet" "the late failure alerts only once"
+  assert_equals 1 "$(nudge_count "$home")" "no second nudge inside the spacing"
+  assert_equals 1 "$(alert_count "$home")" "one alert per episode"
+  pass "the nudge's own unanswered prompt neither closes the episode nor resets its spacing"
+}
+
+test_unconfirmed_nudge_counts_as_attempt() {
+  local home out
+  home=$(make_errored_home errored-unconfirmed 1800)
+  printf 'failed\n' > "$home/herdr/nudge-verdict"
+  out=$(run_check "$home") || fail "check must succeed"
+  assert_contains "$out" "action=alerted" "an unconfirmed nudge alerts"
+  out=$(run_check "$home") || fail "second check must succeed"
+  assert_contains "$out" "action=quiet" "an unconfirmed nudge is not retyped inside the spacing"
+  assert_equals 1 "$(nudge_count "$home")" "an unconfirmed nudge counts as the attempt"
+  pass "a nudge typed but not confirmed waits out the spacing like a sent one"
+}
+
 test_fresh_error_is_left_to_settle() {
   local home out
   home=$(make_errored_home errored-fresh 60)
@@ -695,6 +728,8 @@ fm_test_run \
   test_errored_turn_is_nudged \
   test_errored_recovers_after_nudge \
   test_errored_still_failing_alerts_once_and_retries \
+  test_unanswered_nudge_keeps_episode \
+  test_unconfirmed_nudge_counts_as_attempt \
   test_fresh_error_is_left_to_settle \
   test_error_with_armed_watch_left_alone \
   test_only_an_api_error_is_nudged \

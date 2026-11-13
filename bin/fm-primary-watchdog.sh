@@ -40,7 +40,10 @@
 #             old too. A turn the API refused ends without arming the watch,
 #             so nothing inside the session can wake it again. No inbox note
 #             is needed. Any later entry - a new prompt, a finished turn, the
-#             owner's interrupt - means it is not errored.
+#             owner's interrupt - means it is not errored. While an errored
+#             episode is open, a prompt after the error that has no answer yet
+#             (the nudge itself, or a turn the API is still retrying) keeps
+#             the episode open without another nudge.
 #   alive     none of these; a note waiting behind recent activity is a slow
 #             answer.
 #   uncertain the lock state cannot be classified; nothing is done.
@@ -64,8 +67,8 @@
 #     A nudge is repeated at most every FM_PRIMARY_WATCHDOG_NUDGE_SECS while
 #     the error lasts, so a long outage heals by itself once the API answers;
 #     a nudge that cannot be typed, or a primary still errored after one,
-#     alerts ONCE. An errored episode ends only when the newest turn entry is
-#     no longer an API error;
+#     alerts ONCE. An errored episode ends only when the newest assistant turn
+#     entry is no longer an API error;
 #   - a failed, refused, cooled-down, or unverified restart alerts ONCE, and a
 #     restart that verified but did not keep the primary up alerts once too.
 # A verdict that changes kind (stalled to dead) opens a new episode.
@@ -248,10 +251,11 @@ primary_transcripts() {
   fi
 }
 
-# Print the epoch of the newest turn entry in <transcript> when that entry is
-# an API error, and nothing otherwise. A turn entry is a main-thread user or
-# assistant row; the bookkeeping rows Claude Code appends between turns are
-# skipped. Only the tail is read, so a long session costs the same as a new one.
+# Print the epoch of the newest assistant turn entry in <transcript> when that
+# entry is an API error, prefixed with "pending " when a user turn entry follows
+# it, and nothing otherwise. A turn entry is a main-thread user or assistant
+# row; the bookkeeping rows Claude Code appends between turns are skipped. Only
+# the tail is read, so a long session costs the same as a new one.
 last_turn_error_epoch() {  # <transcript>
   [ -f "$1" ] || return 0
   python3 - "$1" <<'PY' 2>/dev/null || true
@@ -264,6 +268,7 @@ with open(path, "rb") as handle:
     lines = handle.read().decode("utf-8", "replace").splitlines()
 if size > 1048576:
     lines = lines[1:]
+pending = ""
 for line in reversed(lines):
     try:
         row = json.loads(line)
@@ -273,18 +278,22 @@ for line in reversed(lines):
         continue
     if row.get("isSidechain") or row.get("isMeta"):
         continue
-    if row.get("type") == "assistant" and row.get("isApiErrorMessage") is True:
+    if row.get("type") == "user":
+        pending = "pending "
+        continue
+    if row.get("isApiErrorMessage") is True:
         try:
             stamp = (row.get("timestamp") or "").split(".")[0].rstrip("Z")
-            print(calendar.timegm(time.strptime(stamp, "%Y-%m-%dT%H:%M:%S")))
+            print(pending + str(calendar.timegm(time.strptime(stamp, "%Y-%m-%dT%H:%M:%S"))))
         except ValueError:
-            print(int(os.path.getmtime(path)))
+            print(pending + str(int(os.path.getmtime(path))))
     break
 PY
 }
 
 # Sets LOCK_STATE, LOCK_PID, OLDEST_NOTE_AGE (empty when none), ACTIVITY_AGE,
-# ERROR_AGE (empty unless the newest turn entry is an API error), and BEAT_AGE.
+# ERROR_AGE (empty unless the newest turn entry is an API error), ERROR_PENDING
+# (1 when only user turn entries follow an API error), and BEAT_AGE.
 observe() {  # <now>
   local now=$1 ready receipts oldest m newest=0 path transcript= transcript_m=0 error_at
   ready=$(FM_HOME="$FM_HOME" "$SELF_DIR/fm-inbox.sh" ready 2>/dev/null) || ready=
@@ -332,8 +341,10 @@ if ages:
     transcript=$path
   done < <(primary_transcripts)
   ERROR_AGE=
+  ERROR_PENDING=
   error_at=
   [ -z "$transcript" ] || error_at=$(last_turn_error_epoch "$transcript")
+  case "$error_at" in pending\ *) ERROR_PENDING=1; error_at= ;; esac
   case "$error_at" in ''|*[!0-9]*) ;; *) ERROR_AGE=$((now - error_at)); [ "$ERROR_AGE" -ge 0 ] || ERROR_AGE=0 ;; esac
   m=$(mtime "$STATE/.last-watcher-beat")
   BEAT_AGE=$((now - ${m:-0}))
@@ -462,10 +473,12 @@ nudge_submit() {  # <backend> <target>
   fi
 }
 
-# Sets NUDGE_DETAIL. Returns 0 only for a confirmed submit.
+# Sets NUDGE_DETAIL, and NUDGE_TRIED when the line may have been typed.
+# Returns 0 only for a confirmed submit.
 nudge_primary() {
   local backend target verdict
   NUDGE_DETAIL=
+  NUDGE_TRIED=
   [ -f "$ENDPOINT" ] || { NUDGE_DETAIL="no primary endpoint was recorded at session start"; return 1; }
   backend=$(field "$ENDPOINT" backend)
   target=$(field "$ENDPOINT" target)
@@ -480,7 +493,7 @@ nudge_primary() {
     sent) NUDGE_DETAIL="nudged $target"; return 0 ;;
     busy) NUDGE_DETAIL="$target reports a turn in progress" ;;
     composer) NUDGE_DETAIL="the composer in $target is not provably empty, so nothing was typed over it" ;;
-    *) NUDGE_DETAIL="the nudge could not be confirmed in $target" ;;
+    *) NUDGE_DETAIL="the nudge could not be confirmed in $target"; NUDGE_TRIED=1 ;;
   esac
   return 1
 }
@@ -508,6 +521,7 @@ handle_errored() {  # <now> <detail>
       say errored nudged "$NUDGE_DETAIL; $detail"
       return 0
     fi
+    [ -z "$NUDGE_TRIED" ] || nudged=$now
     summary="firstmate in $FM_HOME stopped on an API error $((ERROR_AGE / 60))m ago and could not be nudged: $NUDGE_DETAIL"
   else
     summary="firstmate in $FM_HOME is still stopped on an API error $(( (now - nudged) / 60 ))m after a nudge; the next nudge follows within $(( (NUDGE_SECS - (now - nudged)) / 60 + 1 ))m"
@@ -555,10 +569,15 @@ cmd_check() {
   case "$VERDICT" in
     errored) handle_errored "$now" "$detail"; return 0 ;;
     alive)
-      # A nudged turn that the API refused again is still the same stop: the
-      # episode stays open until a turn entry that is not an API error appears.
-      if [ -n "$ERROR_AGE" ] && [ "$(field "$EPISODE" reason)" = errored ]; then
-        say errored wait "the newest turn entry is still an API error, ${ERROR_AGE}s old; $detail"
+      # A nudged turn that the API refused again, or has not answered yet, is
+      # still the same stop: the episode stays open until an assistant turn
+      # entry that is not an API error appears.
+      if [ -n "$ERROR_AGE$ERROR_PENDING" ] && [ "$(field "$EPISODE" reason)" = errored ]; then
+        if [ -n "$ERROR_AGE" ]; then
+          say errored wait "the newest turn entry is still an API error, ${ERROR_AGE}s old; $detail"
+        else
+          say errored wait "a prompt after the API error has no answer yet; $detail"
+        fi
         return 0
       fi
       if [ -f "$EPISODE" ]; then

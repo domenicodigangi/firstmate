@@ -13,6 +13,7 @@ A note waiting behind recent turn activity is a slow answer, not a stop, and wor
 The primary also counts as stopped, with no inbox note needed, when the newest turn entry in that transcript is an API error (Claude Code's own `isApiErrorMessage` record) at least five minutes old and the watcher's liveness beacon is that old too.
 A turn the API refused ends without arming the watch, so nothing inside the session wakes it again; a login or network failure can leave the primary and every worker idle for hours.
 Any later entry, including a new prompt, a finished turn, or the owner's interrupt, means the primary is not in that state.
+Once the watchdog has acted on that state, the episode stays open until the primary actually answers: a prompt after the error with no answer yet, including the nudge itself, neither closes it nor triggers another nudge.
 The script header owns the exact verdicts, activity signals, and episode rules.
 
 ## What it does
