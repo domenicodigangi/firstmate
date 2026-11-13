@@ -1,8 +1,9 @@
 #!/usr/bin/env bash
 # tests/fm-primary-watchdog.test.sh - the out-of-session primary watchdog.
 #
-# Pins the trigger (alive, slow answer, ended session, stale note), the restart
-# paths through a fake Herdr CLI, and the once-per-episode alert. Every alert
+# Pins the trigger (alive, slow answer, ended session, stale note, a last turn
+# the API refused), the restart paths through a fake Herdr CLI, the nudge of an
+# errored primary through a recorder seam, and the once-per-episode alert. Every alert
 # routes through the FM_WEDGE_ALARM_EXEC recorder seam, so no case can post a
 # real notification, and the fake herdr on PATH answers for a named fake
 # session only, so no case can touch a live Herdr server.
@@ -108,6 +109,16 @@ printf '%s|%s\n' "$1" "$2" >> "${FAKE_ALERT_LOG:?}"
 SH
 chmod +x "$FAKEBIN/alert-recorder"
 
+cat > "$FAKEBIN/nudge-recorder" <<'SH'
+#!/usr/bin/env bash
+# Stands in for the verified submit: records what would be typed and answers
+# with the verdict a control file names (default sent).
+dir=${FAKE_HERDR_DIR:?}
+printf '%s|%s|%s\n' "$1" "$2" "$3" >> "$dir/nudges"
+if [ -f "$dir/nudge-verdict" ]; then cat "$dir/nudge-verdict"; else printf 'sent\n'; fi
+SH
+chmod +x "$FAKEBIN/nudge-recorder"
+
 make_home() {  # <name> -> home
   local home="$TMP_ROOT/$1"
   mkdir -p "$home/state/inbox/handled" "$home/data" "$home/config" "$home/herdr"
@@ -155,6 +166,72 @@ set_activity() {  # <home> <age-seconds>
   [ ! -e "$home/state/.session-start-complete" ] || age_path "$age" "$home/state/.session-start-complete"
 }
 
+# The primary's own session transcript, ending <age> seconds ago in <last>:
+#   error      a turn the API refused (Claude Code's synthetic error message)
+#   reply      an ordinary finished turn
+#   interrupt  the owner stopping the turn
+#   resumed    an API error followed by a new prompt (a turn is under way)
+write_transcript() {  # <home> <last> <age-seconds>
+  local home=$1 last=$2 age=$3 dir
+  dir="$home/userhome/.claude/projects/$(printf '%s' "$home" | sed 's/[^A-Za-z0-9]/-/g')"
+  mkdir -p "$dir"
+  printf 'sess-1\n' > "$home/state/.lock-session"
+  python3 - "$dir/sess-1.jsonl" "$last" "$age" <<'PY'
+import json, sys, time
+path, last, age = sys.argv[1], sys.argv[2], int(sys.argv[3])
+def at(offset):
+    return time.strftime("%Y-%m-%dT%H:%M:%S.000Z", time.gmtime(time.time() - age - offset))
+def user(text, offset):
+    return {"type": "user", "timestamp": at(offset), "message": {"role": "user", "content": text}}
+def reply(offset):
+    return {"type": "assistant", "timestamp": at(offset),
+            "message": {"role": "assistant", "content": [{"type": "text", "text": "done"}]}}
+def error(offset):
+    return {"type": "assistant", "timestamp": at(offset), "isApiErrorMessage": True, "apiErrorStatus": 403,
+            "error": "authentication_failed",
+            "message": {"role": "assistant", "model": "<synthetic>",
+                        "content": [{"type": "text", "text": "API Error: 403"}]}}
+rows = [user("first", 30), reply(20)]
+if last == "error":
+    rows += [user("wake", 2), error(0)]
+elif last == "interrupt":
+    rows += [user("[Request interrupted by user]", 0)]
+elif last == "resumed":
+    rows += [user("wake", 12), error(10), user("continue", 0)]
+elif last != "reply":
+    raise SystemExit("unknown transcript ending " + last)
+# Bookkeeping rows Claude Code appends between turns must never count as a turn.
+rows += [{"type": "system", "subtype": "turn_duration", "timestamp": at(0)}, {"type": "pr-link"}]
+with open(path, "w", encoding="utf-8") as handle:
+    for row in rows:
+        handle.write(json.dumps(row) + "\n")
+PY
+}
+
+# Age the watcher's liveness beacon: a fresh one means the watch is armed.
+set_watcher_beat() {  # <home> <age-seconds>
+  : > "$1/state/.last-watcher-beat"
+  age_path "$2" "$1/state/.last-watcher-beat"
+}
+
+nudge_count() {  # <home>
+  [ -f "$1/herdr/nudges" ] || { printf '0'; return 0; }
+  wc -l < "$1/herdr/nudges" | tr -d ' '
+}
+
+# A live primary whose session is open but whose last turn the API refused.
+make_errored_home() {  # <name> <error-age> -> home
+  local home pid
+  home=$(make_home "$1")
+  pid=$(start_holder)
+  printf '%s\n' "$pid" > "$home/state/.lock"
+  write_endpoint "$home" "$pid"
+  set_activity "$home" "$2"
+  set_watcher_beat "$home" "$2"
+  write_transcript "$home" error "$2"
+  printf '%s\n' "$home"
+}
+
 run_check() {  # <home> [extra args...]
   local home=$1
   shift
@@ -162,6 +239,7 @@ run_check() {  # <home> [extra args...]
     FAKE_ALERT_LOG="$home/alerts" FM_WEDGE_ALARM_EXEC="${ALARM_EXEC-$FAKEBIN/alert-recorder}" \
     FM_PRIMARY_WATCHDOG_VERIFY_SECS="${VERIFY_SECS:-3}" \
     FM_PRIMARY_WATCHDOG_DEAD_GRACE_SECS="${DEAD_GRACE:-0}" \
+    FM_PRIMARY_WATCHDOG_NUDGE_EXEC="$FAKEBIN/nudge-recorder" \
     "$WATCHDOG" check "$@"
 }
 
@@ -445,6 +523,146 @@ test_long_turn_transcript_keeps_alive() {
   pass "a long working turn whose transcript is fresh is never a stall"
 }
 
+test_errored_turn_is_nudged() {
+  local home out line
+  home=$(make_errored_home errored 1800)
+  out=$(run_check "$home") || fail "check must succeed for a primary stopped on an API error"
+  assert_contains "$out" "verdict=errored" "an open session whose last turn the API refused, with no watch armed, is errored"
+  assert_contains "$out" "action=nudged" "an errored primary is nudged without any inbox note waiting"
+  assert_equals 1 "$(nudge_count "$home")" "exactly one nudge is typed"
+  line=$(cat "$home/herdr/nudges")
+  assert_contains "$line" "herdr|fm-fake:w1:p1|" "the nudge goes to the recorded primary endpoint"
+  assert_contains "$line" "bin/fm-wake-drain.sh" "the nudge tells firstmate to drain its wake queue"
+  assert_equals 0 "$(alert_count "$home")" "a nudge that was sent raises no alert"
+  assert_equals 0 "$(run_count "$home")" "an open session is never relaunched"
+  pass "a primary stopped on an API error is nudged once through its recorded endpoint"
+}
+
+test_errored_recovers_after_nudge() {
+  local home out
+  home=$(make_errored_home errored-recovers 1800)
+  run_check "$home" >/dev/null || fail "nudge check must succeed"
+  write_transcript "$home" reply 5
+  out=$(run_check "$home") || fail "recovery check must succeed"
+  assert_contains "$out" "verdict=alive" "a finished turn after the nudge ends the stop"
+  assert_contains "$out" "action=recovered" "the episode is reported as recovered"
+  assert_absent "$home/state/.primary-watchdog" "recovery ends the errored episode"
+  assert_equals 1 "$(nudge_count "$home")" "a recovered primary is not nudged again"
+  assert_equals 0 "$(alert_count "$home")" "a nudge that worked never alerts"
+  pass "a nudge that restarts the primary closes the episode without an alert"
+}
+
+test_errored_still_failing_alerts_once_and_retries() {
+  local home out
+  home=$(make_errored_home errored-persists 1800)
+  run_check "$home" >/dev/null || fail "nudge check must succeed"
+  # The nudged turn failed too: the newest entry is a fresh API error.
+  write_transcript "$home" error 30
+  out=$(run_check "$home") || fail "check must succeed inside the error grace"
+  assert_contains "$out" "verdict=errored" "a fresh failure keeps the open episode"
+  assert_contains "$out" "action=wait" "a failure younger than the grace is left to settle"
+  assert_present "$home/state/.primary-watchdog" "a repeated failure does not close the episode"
+  assert_equals 1 "$(nudge_count "$home")" "no second nudge right after a failed one"
+  write_transcript "$home" error 1800
+  out=$(run_check "$home") || fail "check must succeed for a repeated failure"
+  assert_contains "$out" "action=alerted" "a primary still failing after its nudge alerts the owner"
+  assert_equals 1 "$(alert_count "$home")" "the repeated failure alerts once"
+  assert_equals 1 "$(nudge_count "$home")" "the next nudge waits out the spacing"
+  out=$(run_check "$home") || fail "check must succeed"
+  assert_contains "$out" "action=quiet" "the episode stays quiet between nudges"
+  out=$(FM_PRIMARY_WATCHDOG_NUDGE_SECS=0 run_check "$home") || fail "retry check must succeed"
+  assert_contains "$out" "action=nudged" "a long outage is nudged again once the spacing has passed"
+  assert_equals 2 "$(nudge_count "$home")" "the retry types one more nudge"
+  assert_equals 1 "$(alert_count "$home")" "one alert per episode however many nudges"
+  pass "a primary that keeps failing alerts once and is nudged again at a bounded spacing"
+}
+
+test_unanswered_nudge_keeps_episode() {
+  local home out
+  home=$(make_errored_home errored-retrying 1800)
+  run_check "$home" >/dev/null || fail "nudge check must succeed"
+  # The nudge's own prompt is the newest entry while the API keeps retrying.
+  write_transcript "$home" resumed 400
+  out=$(run_check "$home") || fail "check must succeed while the nudge is unanswered"
+  assert_contains "$out" "verdict=errored" "an unanswered nudge keeps the errored episode"
+  assert_contains "$out" "action=wait" "an unanswered nudge is waited on"
+  assert_present "$home/state/.primary-watchdog" "an unanswered nudge does not close the episode"
+  # The retried turn finally fails.
+  write_transcript "$home" error 1800
+  out=$(run_check "$home") || fail "check must succeed for the late failure"
+  assert_contains "$out" "action=alerted" "a late failure after the nudge alerts the owner"
+  out=$(run_check "$home") || fail "check must succeed"
+  assert_contains "$out" "action=quiet" "the late failure alerts only once"
+  assert_equals 1 "$(nudge_count "$home")" "no second nudge inside the spacing"
+  assert_equals 1 "$(alert_count "$home")" "one alert per episode"
+  pass "the nudge's own unanswered prompt neither closes the episode nor resets its spacing"
+}
+
+test_unconfirmed_nudge_counts_as_attempt() {
+  local home out
+  home=$(make_errored_home errored-unconfirmed 1800)
+  printf 'failed\n' > "$home/herdr/nudge-verdict"
+  out=$(run_check "$home") || fail "check must succeed"
+  assert_contains "$out" "action=alerted" "an unconfirmed nudge alerts"
+  out=$(run_check "$home") || fail "second check must succeed"
+  assert_contains "$out" "action=quiet" "an unconfirmed nudge is not retyped inside the spacing"
+  assert_equals 1 "$(nudge_count "$home")" "an unconfirmed nudge counts as the attempt"
+  pass "a nudge typed but not confirmed waits out the spacing like a sent one"
+}
+
+test_fresh_error_is_left_to_settle() {
+  local home out
+  home=$(make_errored_home errored-fresh 60)
+  out=$(run_check "$home") || fail "check must succeed"
+  assert_contains "$out" "verdict=alive" "an error younger than the grace is not yet a stop"
+  assert_equals 0 "$(nudge_count "$home")" "a fresh error is not nudged"
+  out=$(FM_PRIMARY_WATCHDOG_ERROR_SECS=30 run_check "$home") || fail "check must succeed"
+  assert_contains "$out" "verdict=errored" "the error grace is configurable"
+  pass "an API error is nudged only after the grace, which is configurable"
+}
+
+test_error_with_armed_watch_left_alone() {
+  local home out
+  home=$(make_errored_home errored-armed 1800)
+  set_watcher_beat "$home" 20
+  out=$(run_check "$home") || fail "check must succeed"
+  assert_contains "$out" "verdict=alive" "a live watcher will wake the primary by itself"
+  assert_equals 0 "$(nudge_count "$home")" "a primary whose watch is armed is never typed into"
+  pass "an old API error behind an armed watch is not a stop"
+}
+
+test_only_an_api_error_is_nudged() {
+  local home out ending
+  home=$(make_errored_home errored-other 1800)
+  for ending in reply interrupt resumed; do
+    write_transcript "$home" "$ending" 1800
+    out=$(run_check "$home") || fail "check must succeed for a transcript ending in $ending"
+    assert_contains "$out" "verdict=alive" "a session ending in $ending is not errored"
+  done
+  assert_equals 0 "$(nudge_count "$home")" "a finished turn, an owner interrupt, and a resumed turn are never typed into"
+  assert_equals 0 "$(alert_count "$home")" "none of them alerts without a waiting note"
+  pass "only a last turn the API refused counts as errored; an owner stop is respected"
+}
+
+test_unsendable_nudge_alerts_once() {
+  local home out
+  home=$(make_errored_home errored-composer 1800)
+  printf 'composer\n' > "$home/herdr/nudge-verdict"
+  out=$(run_check "$home") || fail "check must succeed"
+  assert_contains "$out" "action=alerted" "a nudge that cannot be typed alerts instead"
+  assert_contains "$(cat "$home/alerts")" "composer" "the alert says why nothing was typed"
+  assert_equals 1 "$(alert_count "$home")" "the refusal alerts once"
+  out=$(FM_PRIMARY_WATCHDOG_NUDGE_SECS=0 run_check "$home") || fail "second check must succeed"
+  assert_contains "$out" "action=quiet" "a repeated refusal stays quiet"
+  assert_equals 1 "$(alert_count "$home")" "one alert per episode"
+  rm -f "$home/state/.primary-watchdog" "$home/herdr/nudges"
+  sed -i.bak '/^target=/d' "$home/state/.primary-endpoint"
+  out=$(run_check "$home") || fail "check must succeed with an incomplete endpoint"
+  assert_contains "$out" "action=alerted" "an endpoint with no pane target cannot be nudged"
+  assert_equals 0 "$(nudge_count "$home")" "nothing is typed without a recorded pane target"
+  pass "a nudge that cannot be delivered alerts once and types nothing over the owner"
+}
+
 test_secondmate_home_skipped() {
   local home out
   home=$(make_home secondmate)
@@ -507,5 +725,14 @@ fm_test_run \
   test_new_episode_after_recovery \
   test_rex_channel_records_alert_once \
   test_long_turn_transcript_keeps_alive \
+  test_errored_turn_is_nudged \
+  test_errored_recovers_after_nudge \
+  test_errored_still_failing_alerts_once_and_retries \
+  test_unanswered_nudge_keeps_episode \
+  test_unconfirmed_nudge_counts_as_attempt \
+  test_fresh_error_is_left_to_settle \
+  test_error_with_armed_watch_left_alone \
+  test_only_an_api_error_is_nudged \
+  test_unsendable_nudge_alerts_once \
   test_secondmate_home_skipped \
   test_record_writes_endpoint
