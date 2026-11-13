@@ -1,0 +1,23 @@
+ ▐▛███▛█   Claude Code v2.1.323
+▝▜██████▀  Opus 5.5 with medium effort · Claude Ultra
+ ▝▝   ▝▝   /home/ddg/.no-mistakes/worktrees/67bf63ea0b24/01M7ASVG3KBSBFE6C20PFZ9QNP
+❯ say hello
+● Please run /login · API Error: 403 stub: forbidden
+✻ Cooked for 0s · done 4:05 PM
+❯ Watchdog: your last turn failed on an API error. Run bin/fm-wake-drain.sh and carry on.
+● Please run /login · API Error: 403 stub: forbidden
+✻ Sautéed for 0s · done 4:06 PM
+❯ Watchdog: your last turn failed on an API error. Run bin/fm-wake-drain.sh and carry on.status?
+● Back online (stub reply).
+✻ Cooked for 1s · done 4:09 PM
+❯ ping
+● Please run /login · API Error: 403 stub: forbidden
+✻ Baked for 0s · done 4:09 PM
+❯ Watchdog: your last turn failed on an API error. Run bin/fm-wake-drain.sh and carry on.
+● Back online (stub reply).
+✻ Churned for 1s · done 4:10 PM
+─────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────── fm-lab-primary ─
+❯ 
+────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────
+  [Opus 5.5] 0% context | 01M7ASVG3KBSBFE6C20PFZ9QNP | Fable 7d 27%
+  ⏵⏵ auto mode on (shift+tab to cycle)

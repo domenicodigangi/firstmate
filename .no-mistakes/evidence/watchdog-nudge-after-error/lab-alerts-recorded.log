@@ -1,0 +1,2 @@
+16:07:28|herdr|firstmate in /tmp/fm-lab.ZReFnH is still stopped on an API error 0m after a nudge; the next nudge follows within 30m
+16:10:18|herdr|firstmate in /tmp/fm-lab.ZReFnH stopped on an API error 0m ago and could not be nudged: the composer in %0 is not provably empty, so nothing was typed over it
