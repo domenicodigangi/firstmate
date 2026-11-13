@@ -1,6 +1,7 @@
 #!/usr/bin/env bash
 # fm-primary-watchdog.sh - notice, from outside firstmate's own session, that the
-# primary has stopped, restart it, and alert the captain once when it cannot.
+# primary has stopped, restart or nudge it, and alert the captain once when it
+# cannot.
 #
 # Usage:
 #   fm-primary-watchdog.sh record [--pid <harness-pid>]
@@ -32,7 +33,16 @@
 #             state/.claude-autoarm-epoch (every Claude
 #             primary turn end), state/inbox/handled (every note
 #             acknowledgement), and state/.session-start-complete.
-#   alive     neither; a note waiting behind recent activity is a slow answer.
+#   errored   a live harness holds the lock, the newest turn entry in that
+#             same transcript is an API error (Claude Code's own
+#             `isApiErrorMessage` record) at least the error grace old, and
+#             the watcher's liveness beacon (state/.last-watcher-beat) is that
+#             old too. A turn the API refused ends without arming the watch,
+#             so nothing inside the session can wake it again. No inbox note
+#             is needed. Any later entry - a new prompt, a finished turn, the
+#             owner's interrupt - means it is not errored.
+#   alive     none of these; a note waiting behind recent activity is a slow
+#             answer.
 #   uncertain the lock state cannot be classified; nothing is done.
 #   skipped   this is a secondmate home, which its parent recovers.
 # Worker state is never read, so one slow worker can never trigger it.
@@ -45,6 +55,17 @@
 #   - a stalled primary is never restarted, only alerted: its session still
 #     runs, the owner may have stopped firstmate there on purpose, and a
 #     restart would override that; only an ended session is restarted;
+#   - an errored primary is nudged: one short line typed into its recorded
+#     endpoint through the backend's verified submit primitive
+#     (fm_backend_send_text_submit, the one the away-mode daemon injects
+#     through), only when the backend does not report a turn in progress and
+#     the composer is provably empty, so the owner's own typing is never
+#     overwritten. The session, its context, and its process are untouched.
+#     A nudge is repeated at most every FM_PRIMARY_WATCHDOG_NUDGE_SECS while
+#     the error lasts, so a long outage heals by itself once the API answers;
+#     a nudge that cannot be typed, or a primary still errored after one,
+#     alerts ONCE. An errored episode ends only when the newest turn entry is
+#     no longer an API error;
 #   - a failed, refused, cooled-down, or unverified restart alerts ONCE, and a
 #     restart that verified but did not keep the primary up alerts once too.
 # A verdict that changes kind (stalled to dead) opens a new episode.
@@ -74,6 +95,8 @@
 #   FM_PRIMARY_WATCHDOG_DEAD_GRACE_SECS  wait before restarting an ended session (120)
 #   FM_PRIMARY_WATCHDOG_COOLDOWN_SECS    minimum spacing between restarts (1800)
 #   FM_PRIMARY_WATCHDOG_VERIFY_SECS      wait for a fresh session after a restart (180)
+#   FM_PRIMARY_WATCHDOG_ERROR_SECS       age of an API error before it is nudged (300)
+#   FM_PRIMARY_WATCHDOG_NUDGE_SECS       minimum spacing between nudges (1800)
 #   FM_WEDGE_ALARM_CHANNEL / FM_WEDGE_ALARM_EXEC  alert channel override and test seam
 set -euo pipefail
 
@@ -91,12 +114,16 @@ NOTE_SECS=${FM_PRIMARY_WATCHDOG_NOTE_SECS:-900}
 DEAD_GRACE_SECS=${FM_PRIMARY_WATCHDOG_DEAD_GRACE_SECS:-120}
 COOLDOWN_SECS=${FM_PRIMARY_WATCHDOG_COOLDOWN_SECS:-1800}
 VERIFY_SECS=${FM_PRIMARY_WATCHDOG_VERIFY_SECS:-180}
+ERROR_SECS=${FM_PRIMARY_WATCHDOG_ERROR_SECS:-300}
+NUDGE_SECS=${FM_PRIMARY_WATCHDOG_NUDGE_SECS:-1800}
+# One short line: the verified submit proves it in the composer before Enter.
+NUDGE_TEXT="Watchdog: your last turn failed on an API error. Run bin/fm-wake-drain.sh and carry on."
 RUN_LOCK_STALE_SECS=900
 
 die() { printf 'fm-primary-watchdog: %s\n' "$*" >&2; exit 2; }
 log() { printf 'fm-primary-watchdog: %s\n' "$*" >&2; }
 
-for _v in NOTE_SECS DEAD_GRACE_SECS COOLDOWN_SECS VERIFY_SECS; do
+for _v in NOTE_SECS DEAD_GRACE_SECS COOLDOWN_SECS VERIFY_SECS ERROR_SECS NUDGE_SECS; do
   case "${!_v}" in ''|*[!0-9]*) die "FM_PRIMARY_WATCHDOG_${_v} must be a whole number of seconds" ;; esac
 done
 unset _v
@@ -221,9 +248,45 @@ primary_transcripts() {
   fi
 }
 
-# Sets LOCK_STATE, LOCK_PID, OLDEST_NOTE_AGE (empty when none), ACTIVITY_AGE.
+# Print the epoch of the newest turn entry in <transcript> when that entry is
+# an API error, and nothing otherwise. A turn entry is a main-thread user or
+# assistant row; the bookkeeping rows Claude Code appends between turns are
+# skipped. Only the tail is read, so a long session costs the same as a new one.
+last_turn_error_epoch() {  # <transcript>
+  [ -f "$1" ] || return 0
+  python3 - "$1" <<'PY' 2>/dev/null || true
+import calendar, json, os, sys, time
+path = sys.argv[1]
+with open(path, "rb") as handle:
+    handle.seek(0, os.SEEK_END)
+    size = handle.tell()
+    handle.seek(max(0, size - 1048576))
+    lines = handle.read().decode("utf-8", "replace").splitlines()
+if size > 1048576:
+    lines = lines[1:]
+for line in reversed(lines):
+    try:
+        row = json.loads(line)
+    except ValueError:
+        continue
+    if not isinstance(row, dict) or row.get("type") not in ("user", "assistant"):
+        continue
+    if row.get("isSidechain") or row.get("isMeta"):
+        continue
+    if row.get("type") == "assistant" and row.get("isApiErrorMessage") is True:
+        try:
+            stamp = (row.get("timestamp") or "").split(".")[0].rstrip("Z")
+            print(calendar.timegm(time.strptime(stamp, "%Y-%m-%dT%H:%M:%S")))
+        except ValueError:
+            print(int(os.path.getmtime(path)))
+    break
+PY
+}
+
+# Sets LOCK_STATE, LOCK_PID, OLDEST_NOTE_AGE (empty when none), ACTIVITY_AGE,
+# ERROR_AGE (empty unless the newest turn entry is an API error), and BEAT_AGE.
 observe() {  # <now>
-  local now=$1 ready receipts oldest m newest=0 path
+  local now=$1 ready receipts oldest m newest=0 path transcript= transcript_m=0 error_at
   ready=$(FM_HOME="$FM_HOME" "$SELF_DIR/fm-inbox.sh" ready 2>/dev/null) || ready=
   receipts=$(FM_HOME="$FM_HOME" "$SELF_DIR/fm-inbox.sh" receipts --all-pending 2>/dev/null) || receipts=
   read -r LOCK_STATE LOCK_PID <<EOF
@@ -262,6 +325,18 @@ if ages:
   done < <(primary_transcripts
     printf '%s\n' "$STATE/.claude-autoarm-epoch" "$STATE/inbox/handled" "$STATE/.session-start-complete")
   ACTIVITY_AGE=$((now - newest))
+  while IFS= read -r path; do
+    m=$(mtime "$path")
+    [ -n "$m" ] && [ "$m" -gt "$transcript_m" ] || continue
+    transcript_m=$m
+    transcript=$path
+  done < <(primary_transcripts)
+  ERROR_AGE=
+  error_at=
+  [ -z "$transcript" ] || error_at=$(last_turn_error_epoch "$transcript")
+  case "$error_at" in ''|*[!0-9]*) ;; *) ERROR_AGE=$((now - error_at)); [ "$ERROR_AGE" -ge 0 ] || ERROR_AGE=0 ;; esac
+  m=$(mtime "$STATE/.last-watcher-beat")
+  BEAT_AGE=$((now - ${m:-0}))
 }
 
 classify() {
@@ -270,7 +345,9 @@ classify() {
     held) ;;
     *) VERDICT=uncertain; return ;;
   esac
-  if [ -n "$OLDEST_NOTE_AGE" ] && [ "$OLDEST_NOTE_AGE" -ge "$NOTE_SECS" ] \
+  if [ -n "$ERROR_AGE" ] && [ "$ERROR_AGE" -ge "$ERROR_SECS" ] && [ "$BEAT_AGE" -ge "$ERROR_SECS" ]; then
+    VERDICT=errored
+  elif [ -n "$OLDEST_NOTE_AGE" ] && [ "$OLDEST_NOTE_AGE" -ge "$NOTE_SECS" ] \
     && [ "$ACTIVITY_AGE" -ge "$NOTE_SECS" ]; then
     VERDICT=stalled
   else
@@ -366,6 +443,86 @@ restart_primary() {
   return 0
 }
 
+# Type the nudge into <backend> <target> and print sent|busy|composer|failed.
+# Nothing is typed while a turn is in progress or the composer holds text.
+nudge_submit() {  # <backend> <target>
+  local backend=$1 target=$2
+  # shellcheck source=bin/fm-supervisor-target-lib.sh
+  . "$SELF_DIR/fm-supervisor-target-lib.sh"
+  # shellcheck source=bin/fm-backend.sh
+  . "$SELF_DIR/fm-backend.sh"
+  if [ "$(fm_backend_busy_state "$backend" "$target" 2>/dev/null)" = busy ]; then
+    printf 'busy'
+  elif [ "$(fm_backend_composer_state "$backend" "$target" 2>/dev/null)" != empty ]; then
+    printf 'composer'
+  elif [ "$(fm_backend_send_text_submit "$backend" "$target" "$NUDGE_TEXT" 3 0.4 0.4 2>/dev/null)" = empty ]; then
+    printf 'sent'
+  else
+    printf 'failed'
+  fi
+}
+
+# Sets NUDGE_DETAIL. Returns 0 only for a confirmed submit.
+nudge_primary() {
+  local backend target verdict
+  NUDGE_DETAIL=
+  [ -f "$ENDPOINT" ] || { NUDGE_DETAIL="no primary endpoint was recorded at session start"; return 1; }
+  backend=$(field "$ENDPOINT" backend)
+  target=$(field "$ENDPOINT" target)
+  [ -n "$backend" ] && [ -n "$target" ] || { NUDGE_DETAIL="the recorded endpoint is incomplete"; return 1; }
+  # Test seam, armed only by the suite (tests/lib.sh exports FM_TEST_SEAM).
+  if [ "${FM_TEST_SEAM:-}" = 1 ] && [ -n "${FM_PRIMARY_WATCHDOG_NUDGE_EXEC:-}" ]; then
+    verdict=$("$FM_PRIMARY_WATCHDOG_NUDGE_EXEC" "$backend" "$target" "$NUDGE_TEXT" 2>/dev/null) || verdict=failed
+  else
+    verdict=$(nudge_submit "$backend" "$target") || verdict=failed
+  fi
+  case "$verdict" in
+    sent) NUDGE_DETAIL="nudged $target"; return 0 ;;
+    busy) NUDGE_DETAIL="$target reports a turn in progress" ;;
+    composer) NUDGE_DETAIL="the composer in $target is not provably empty, so nothing was typed over it" ;;
+    *) NUDGE_DETAIL="the nudge could not be confirmed in $target" ;;
+  esac
+  return 1
+}
+
+# An errored primary: nudge at a bounded spacing, alert once per episode.
+handle_errored() {  # <now> <detail>
+  local now=$1 detail=$2 since reason nudged alerted summary
+  local -a record
+  reason=$(field "$EPISODE" reason)
+  since=$(field "$EPISODE" since)
+  nudged=$(field "$EPISODE" nudged_at)
+  alerted=$(field "$EPISODE" alerted_at)
+  if [ "$reason" != errored ] || [ -z "$since" ]; then
+    since=$now
+    nudged=
+    alerted=
+  fi
+  record=("since=$since" "reason=errored")
+  case "$nudged" in ''|*[!0-9]*) nudged= ;; esac
+  if [ -z "$nudged" ] || [ $((now - nudged)) -ge "$NUDGE_SECS" ]; then
+    if nudge_primary; then
+      record+=("nudged_at=$now")
+      [ -z "$alerted" ] || record+=("alerted_at=$alerted")
+      write_record "$EPISODE" "${record[@]}"
+      say errored nudged "$NUDGE_DETAIL; $detail"
+      return 0
+    fi
+    summary="firstmate in $FM_HOME stopped on an API error $((ERROR_AGE / 60))m ago and could not be nudged: $NUDGE_DETAIL"
+  else
+    summary="firstmate in $FM_HOME is still stopped on an API error $(( (now - nudged) / 60 ))m after a nudge; the next nudge follows within $(( (NUDGE_SECS - (now - nudged)) / 60 + 1 ))m"
+  fi
+  [ -z "$nudged" ] || record+=("nudged_at=$nudged")
+  if [ -n "$alerted" ]; then
+    write_record "$EPISODE" "${record[@]}" "alerted_at=$alerted"
+    say errored quiet "already alerted for this episode; $detail"
+    return 0
+  fi
+  alert "$summary"
+  write_record "$EPISODE" "${record[@]}" "alerted_at=$now"
+  say errored alerted "$summary"
+}
+
 acquire_run_lock() {
   local m
   if mkdir "$RUN_LOCK" 2>/dev/null; then
@@ -393,9 +550,17 @@ cmd_check() {
   observe "$now"
   classify
   detail="lock=$LOCK_STATE oldest-note-age=${OLDEST_NOTE_AGE:-none} activity-age=$ACTIVITY_AGE"
+  [ -z "$ERROR_AGE" ] || detail="$detail error-age=$ERROR_AGE watcher-beat-age=$BEAT_AGE"
 
   case "$VERDICT" in
+    errored) handle_errored "$now" "$detail"; return 0 ;;
     alive)
+      # A nudged turn that the API refused again is still the same stop: the
+      # episode stays open until a turn entry that is not an API error appears.
+      if [ -n "$ERROR_AGE" ] && [ "$(field "$EPISODE" reason)" = errored ]; then
+        say errored wait "the newest turn entry is still an API error, ${ERROR_AGE}s old; $detail"
+        return 0
+      fi
       if [ -f "$EPISODE" ]; then
         rm -f "$EPISODE"
         say alive recovered "$detail"
