@@ -296,7 +296,7 @@ PY
 # ERROR_AGE (empty unless the newest turn entry is an API error), ERROR_PENDING
 # (1 when only user turn entries follow an API error), and BEAT_AGE.
 observe() {  # <now>
-  local now=$1 ready receipts oldest m newest=0 path transcript= transcript_m=0 error_at
+  local now=$1 ready receipts oldest m newest=0 path transcript='' transcript_m=0 error_at
   ready=$(FM_HOME="$FM_HOME" "$SELF_DIR/fm-inbox.sh" ready 2>/dev/null) || ready=
   receipts=$(FM_HOME="$FM_HOME" "$SELF_DIR/fm-inbox.sh" receipts --all-pending 2>/dev/null) || receipts=
   read -r LOCK_STATE LOCK_PID <<EOF
