@@ -50,8 +50,9 @@
 #   skipped   this is a secondmate home, which its parent recovers.
 # Worker state is never read, so one slow worker can never trigger it.
 #
-# Episodes. A dead or stalled verdict opens an episode in state/.primary-watchdog;
-# the next alive verdict closes it. Within one episode:
+# Episodes. A dead, stalled, or errored verdict opens an episode in
+# state/.primary-watchdog; the next alive verdict closes it, except as the
+# errored rules below keep an errored episode open. Within one episode:
 #   - a dead primary waits FM_PRIMARY_WATCHDOG_DEAD_GRACE_SECS, then gets at
 #     most ONE restart attempt, and none while a previous restart is inside
 #     FM_PRIMARY_WATCHDOG_COOLDOWN_SECS (state/.primary-watchdog-last-restart);
